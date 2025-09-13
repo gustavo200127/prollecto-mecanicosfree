@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2>Inicio de Sesión Administrador</h2>
+  <form method="post" action="{{ url_for('routes.login_admin') }}">
+    
+    <div class="mb-3">
+      <label>Correo</label>
+      <input type="email" name="correoElectronico" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+      <label>Contraseña</label>
+      <input type="password" name="contrasena" class="form-control" required>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Iniciar Sesión</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>📦 Productos Pendientes</h2>
+
+    {% if productos %}
+        <table class="table table-striped">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Producto</th>
+                    <th>Marca</th>
+                    <th>Precio</th>
+                    <th>Stock</th>
+                    <th>Taller</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in productos %}
+                <tr>
+                    <td>{{ p.id_producto }}</td>
+                    <td>{{ p.tipo_producto }}</td>
+                    <td>{{ p.marca_producto }}</td>
+                    <td>${{ p.precio_producto }}</td>
+                    <td>{{ p.stock_producto }}</td>
+                    <td>{{ p.taller }}</td>
+                    <td>
+                        <a href="{{ url_for('routes.aprobar_producto', id_producto=p.id_producto) }}" 
+                           class="btn btn-success btn-sm">Aprobar ✅</a>
+                        <a href="{{ url_for('routes.rechazar_producto', id_producto=p.id_producto) }}" 
+                           class="btn btn-danger btn-sm">Rechazar ❌</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="text-muted">No hay productos pendientes.</p>
+    {% endif %}
+
+    <!-- Botón volver -->
+    <a href="{{ url_for('routes.admin_dashboard') }}" class="btn btn-secondary mt-3">⬅️ Volver al Panel Admin</a>
+</div>
+{% endblock %}

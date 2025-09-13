@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Editar Usuario</h2>
+  <form method="post">
+    <div class="mb-3">
+      <label>Documento</label>
+      <input name="numdocumento" class="form-control" value="{{ usuario.numdocumento }}" readonly>
+    </div>
+    <div class="mb-3">
+      <label>Nombre</label>
+      <input name="nombre_usu" class="form-control" value="{{ usuario.nombre_usu }}" required>
+    </div>
+    <div class="mb-3">
+      <label>Correo</label>
+      <input name="correoElectronico" class="form-control" value="{{ usuario.correoElectronico }}" type="email" required>
+    </div>
+    <div class="mb-3">
+      <label>Nueva contraseña (dejar vacío para mantener actual)</label>
+      <input name="contrasena" class="form-control" type="password" placeholder="Dejar vacío para no cambiar">
+    </div>
+    <div class="mb-3">
+      <label>Repetir nueva contraseña</label>
+      <input name="contrasena2" class="form-control" type="password" placeholder="Repetir nueva contraseña">
+    </div>
+    <button class="btn btn-success">Actualizar</button>
+    <a href="{{ url_for('routes.usuarios') }}" class="btn btn-secondary">Cancelar</a>
+  </form>
+</div>
+{% endblock %}

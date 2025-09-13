@@ -1,0 +1,11 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Bienvenido Taller, {{ usuario.nombre_usu }}</h2>
+  <p>Desde aquí puedes gestionar tus servicios, productos y solicitudes de clientes.</p>
+  <a href="{{ url_for('routes.agregar_servicio') }}" class="btn btn-primary">Agregar Servicio</a>
+<a href="{{ url_for('routes.agregar_producto') }}" class="btn btn-info">Agregar Producto</a>
+<a href="{{ url_for('routes.logout') }}" class="btn btn-danger">Cerrar Sesión</a>
+  <a href="#" class="btn btn-info">Ver Solicitudes de Clientes</a>
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Registrar Vehículo</h2>
+  <form method="post" action="{{ url_for('routes.agregar_vehiculo') }}">
+    
+    <div class="mb-3">
+      <label>Tipo de Vehículo</label>
+      <input type="text" name="tipo_vehiculo" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+      <label>Modelo</label>
+      <input type="text" name="modelo_vehiculo" class="form-control" required>
+    </div>
+
+    <button type="submit" class="btn btn-success">Guardar</button>
+
+    {% if session['usuario']['rol'] == 'taller' %}
+        <a href="{{ url_for('routes.perfil_taller') }}" class="btn btn-secondary">Cancelar</a>
+    {% else %}
+        <a href="{{ url_for('routes.perfil_cliente') }}" class="btn btn-secondary">Cancelar</a>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

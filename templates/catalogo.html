@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4 text-center">Catálogo de Talleres</h2>
+
+    <!-- Servicios -->
+    <h3 class="mb-3">🔧 Servicios</h3>
+    <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>Taller</th>
+                <th>Servicio</th>
+                <th>Precio</th>
+                <th>Disponibilidad</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in servicios %}
+            <tr>
+                <td>{{ s.taller }}</td>
+                <td>{{ s.tipo_servicio }}</td>
+                <td>${{ s.precio }}</td>
+                <td>
+                    {% if s.disponibilidad == 1 %}
+                        <span class="badge bg-success">Disponible</span>
+                    {% else %}
+                        <span class="badge bg-danger">No disponible</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="text-center text-muted">No hay servicios disponibles</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Productos -->
+    <h3 class="mt-5 mb-3">🛠️ Productos</h3>
+    <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>Taller</th>
+                <th>Producto</th>
+                <th>Marca</th>
+                <th>Precio</th>
+                <th>Stock</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in productos %}
+            <tr>
+                <td>{{ p.taller }}</td>
+                <td>{{ p.tipo_producto }}</td>
+                <td>{{ p.marca_producto }}</td>
+                <td>${{ p.precio_producto }}</td>
+                <td>
+                    {% if p.stock_producto > 0 %}
+                        {{ p.stock_producto }}
+                    {% else %}
+                        <span class="text-danger">Agotado</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" class="text-center text-muted">No hay productos publicados</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

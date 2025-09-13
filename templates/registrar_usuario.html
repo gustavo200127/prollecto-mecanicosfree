@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Nuevo Usuario</h2>
+  <form method="post" action="{{ url_for('routes.registrar_usuario') }}">
+    
+    <div class="mb-3">
+      <label>Documento</label>
+      <input name="numdocumento" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+      <label>Nombre</label>
+      <input name="nombre_usu" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+      <label>Correo</label>
+      <input name="correoElectronico" class="form-control" type="email" required>
+    </div>
+
+    <div class="mb-3">
+      <label>Contraseña</label>
+      <input name="contrasena" class="form-control" type="password" required>
+    </div>
+
+    <div class="mb-3">
+      <label>Repetir Contraseña</label>
+      <input name="contrasena2" class="form-control" type="password" required>
+    </div>
+
+    <div class="mb-3">
+      <label>Rol</label>
+      <select name="rol" class="form-control" required>
+        <option value="cliente" selected>Cliente</option>
+        <option value="taller">Solicitar Taller</option>
+      </select>
+      <small class="form-text text-muted">
+        Si seleccionas <b>Solicitar Taller</b>, tu cuenta quedará pendiente de aprobación por un administrador.
+      </small>
+    </div>
+
+    <button type="submit" class="btn btn-success">Guardar</button>
+    <a href="{{ url_for('routes.usuarios') }}" class="btn btn-secondary">Cancelar</a>
+  </form>
+</div>
+{% endblock %}
