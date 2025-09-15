@@ -460,3 +460,30 @@ def agregar_producto():
 
     return render_template("agregar_producto.html")
 
+# --------------------------
+# AGREGAR VEHÍCULO (CLIENTE)
+# --------------------------
+@routes.route("/agregar_vehiculo", methods=["GET", "POST"])
+def agregar_vehiculo():
+    if "usuario" not in session or session["usuario"].get("rol") != "cliente":
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    if request.method == "POST":
+        tipo_vehiculo = request.form["tipo_vehiculo"]
+        modelo_vehiculo = request.form["modelo_vehiculo"]
+
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO vehiculos (tipo_vehiculo, modelo_vehiculo, id_usucliente)
+            VALUES (%s, %s, %s)
+        """, (tipo_vehiculo, modelo_vehiculo, session["usuario"]["numdocumento"]))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        flash("Vehículo registrado correctamente ✅", "success")
+        return redirect(url_for("routes.perfil_cliente"))
+
+    return render_template("agregar_vehiculo.html")
