@@ -35,7 +35,7 @@
             </tr>
             {% endfor %}
         </tbody>
-</table>
+    </table>
 
     <!-- Productos -->
     <h3 class="mt-5 mb-3">🛠️ Productos</h3>
@@ -66,11 +66,14 @@
                 </td>
                 <td>
                     {% if p.stock_producto > 0 %}
-                        {% if session.get("usuario") and session["usuario"]["rol"] == "cliente" %}
-                            <a href="{{ url_for('routes.carrito_agregar', id_producto=p.id_producto) }}" 
-                               class="btn btn-success btn-sm">🛒 Añadir</a>
+                        {% if session.get("usuario") and session["usuario"]["rol"] in ["cliente", "taller"] %}
+                            <form action="{{ url_for('routes.carrito_agregar', id_producto=p.id_producto) }}" method="post" class="d-flex">
+                                <input type="number" name="cantidad" value="1" min="1" max="{{ p.stock_producto }}" 
+                                       class="form-control me-2" style="width: 80px;">
+                                <button type="submit" class="btn btn-success btn-sm">🛒 Añadir</button>
+                            </form>
                         {% else %}
-                            <span class="text-muted">Solo clientes</span>
+                            <span class="text-muted">Solo clientes/talleres</span>
                         {% endif %}
                     {% else %}
                         <span class="text-muted">No disponible</span>

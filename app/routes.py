@@ -584,12 +584,22 @@ def admin_ver_servicio(id_servicio):
 # --------------------------
 # AGREGAR PRODUCTO AL CARRITO (permitir cliente o taller)
 # --------------------------
-@routes.route("/carrito/agregar/<int:id_producto>")
+@routes.route("/carrito/agregar/<int:id_producto>", methods=["POST"])
 def carrito_agregar(id_producto):
     # permitir compras a clientes y talleres
     if "usuario" not in session or session["usuario"]["rol"] not in ["cliente", "taller"]:
         flash("Debes iniciar sesión como cliente o taller para comprar ❌", "danger")
         return redirect(url_for("routes.login"))
+
+    # cantidad enviada desde el formulario
+    try:
+        cantidad = int(request.form.get("cantidad", 1))
+    except ValueError:
+        cantidad = 1
+
+    if cantidad <= 0:
+        flash("La cantidad debe ser mayor a 0 ❌", "danger")
+        return redirect(url_for("routes.catalogo"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
@@ -605,8 +615,8 @@ def carrito_agregar(id_producto):
         flash("Producto no encontrado ❌", "danger")
         return redirect(url_for("routes.catalogo"))
 
-    if producto.get("stock_producto", 0) <= 0:
-        flash("Producto sin stock ❌", "danger")
+    if producto.get("stock_producto", 0) < cantidad:
+        flash(f"Solo hay {producto['stock_producto']} unidades disponibles ❌", "danger")
         return redirect(url_for("routes.catalogo"))
 
     # Inicializar carrito si no existe
@@ -616,19 +626,23 @@ def carrito_agregar(id_producto):
     # Revisar si ya está en el carrito -> aumentar cantidad
     for item in session["carrito"]:
         if item["id_producto"] == producto["id_producto"]:
-            item["cantidad"] += 1
+            if item["cantidad"] + cantidad > producto["stock_producto"]:
+                flash(f"No puedes agregar más de {producto['stock_producto']} unidades ❌", "danger")
+                return redirect(url_for("routes.catalogo"))
+            item["cantidad"] += cantidad
             break
     else:
         session["carrito"].append({
             "id_producto": producto["id_producto"],
             "nombre": f"{producto['tipo_producto']} - {producto['marca_producto']}",
             "precio": float(producto["precio_producto"]),
-            "cantidad": 1
+            "cantidad": cantidad
         })
 
     session.modified = True
-    flash("Producto agregado al carrito 🛒", "success")
+    flash(f"{cantidad} unidad(es) agregada(s) al carrito 🛒", "success")
     return redirect(url_for("routes.catalogo"))
+
 
 
 # --------------------------
