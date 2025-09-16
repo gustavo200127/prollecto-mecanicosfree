@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Factura #{{ factura.id_factura }}</h2>
+  <p><strong>Fecha:</strong> {{ factura.fecha_emision }}</p>
+  <p><strong>Total:</strong> ${{ factura.total }}</p>
+
+  <h4 class="mt-3">Detalles</h4>
+  <table class="table table-bordered">
+    <thead class="table-dark">
+      <tr><th>Producto</th><th>Cantidad</th><th>Precio unitario</th><th>Subtotal</th></tr>
+    </thead>
+    <tbody>
+      {% for d in detalles %}
+      <tr>
+        <td>{{ d.tipo_producto or 'Servicio' }} {% if d.marca_producto %}- {{ d.marca_producto }}{% endif %}</td>
+        <td>{{ d.cantidad }}</td>
+        <td>${{ d.precio_unitario }}</td>
+        <td>${{ d.subtotal }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <a href="{{ url_for('routes.mis_facturas') }}" class="btn btn-secondary">Volver</a>
+</div>
+{% endblock %}

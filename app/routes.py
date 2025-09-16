@@ -579,3 +579,213 @@ def admin_ver_servicio(id_servicio):
         return redirect(url_for("routes.admin_publicaciones"))
 
     return render_template("admin_ver_servicio.html", servicio=servicio)
+
+
+# --------------------------
+# AGREGAR PRODUCTO AL CARRITO (permitir cliente o taller)
+# --------------------------
+@routes.route("/carrito/agregar/<int:id_producto>")
+def carrito_agregar(id_producto):
+    # permitir compras a clientes y talleres
+    if "usuario" not in session or session["usuario"]["rol"] not in ["cliente", "taller"]:
+        flash("Debes iniciar sesión como cliente o taller para comprar ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id_producto, tipo_producto, marca_producto, precio_producto, stock_producto
+        FROM producto
+        WHERE id_producto=%s
+    """, (id_producto,))
+    producto = cursor.fetchone()
+    conn.close()
+
+    if not producto:
+        flash("Producto no encontrado ❌", "danger")
+        return redirect(url_for("routes.catalogo"))
+
+    if producto.get("stock_producto", 0) <= 0:
+        flash("Producto sin stock ❌", "danger")
+        return redirect(url_for("routes.catalogo"))
+
+    # Inicializar carrito si no existe
+    if "carrito" not in session:
+        session["carrito"] = []
+
+    # Revisar si ya está en el carrito -> aumentar cantidad
+    for item in session["carrito"]:
+        if item["id_producto"] == producto["id_producto"]:
+            item["cantidad"] += 1
+            break
+    else:
+        session["carrito"].append({
+            "id_producto": producto["id_producto"],
+            "nombre": f"{producto['tipo_producto']} - {producto['marca_producto']}",
+            "precio": float(producto["precio_producto"]),
+            "cantidad": 1
+        })
+
+    session.modified = True
+    flash("Producto agregado al carrito 🛒", "success")
+    return redirect(url_for("routes.catalogo"))
+
+
+# --------------------------
+# VER CARRITO
+# --------------------------
+@routes.route("/carrito")
+def carrito_ver():
+    carrito = session.get("carrito", [])
+    total = sum(item["precio"] * item["cantidad"] for item in carrito) if carrito else 0
+    return render_template("carrito.html", carrito=carrito, total=total)
+
+
+# --------------------------
+# ELIMINAR PRODUCTO DEL CARRITO
+# --------------------------
+@routes.route("/carrito/eliminar/<int:id_producto>")
+def carrito_eliminar(id_producto):
+    if "carrito" in session:
+        session["carrito"] = [item for item in session["carrito"] if item["id_producto"] != id_producto]
+        session.modified = True
+        flash("Producto eliminado del carrito ❌", "info")
+    return redirect(url_for("routes.carrito_ver"))
+
+
+# --------------------------
+# FINALIZAR COMPRA -> crear factura y detalle_factura
+# --------------------------
+@routes.route("/carrito/finalizar", methods=["GET", "POST"])
+def finalizar_compra():
+    # Solo clientes o talleres pueden comprar
+    if "usuario" not in session or session["usuario"]["rol"] not in ["cliente", "taller"]:
+        flash("Debes iniciar sesión como cliente o taller para comprar ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    # Validación: clientes deben tener vehículo registrado
+    if session["usuario"]["rol"] == "cliente":
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM vehiculos WHERE id_usucliente = %s",
+            (session["usuario"]["numdocumento"],)
+        )
+        tiene_vehiculo = cursor.fetchone()[0]
+        conn.close()
+
+        if tiene_vehiculo == 0:
+            flash("Debes registrar un vehículo antes de realizar compras 🚗❌", "danger")
+            return redirect(url_for("routes.agregar_vehiculo"))
+
+    carrito = session.get("carrito", [])
+    if not carrito:
+        flash("Tu carrito está vacío 🛒", "info")
+        return redirect(url_for("routes.catalogo"))
+
+    # Crear factura (encabezado)
+    conn = conectar_db()
+    cursor = conn.cursor()
+    try:
+        id_cliente = session["usuario"]["numdocumento"]
+        cursor.execute("INSERT INTO factura (id_cliente, total) VALUES (%s, %s)", (id_cliente, 0.00))
+        conn.commit()
+        id_factura = cursor.lastrowid
+
+        # Insertar cada item en detalle_factura
+        for item in carrito:
+            id_producto = item["id_producto"]
+            cantidad = int(item["cantidad"])
+            precio_unitario = float(item["precio"])
+            subtotal = round(precio_unitario * cantidad, 2)
+
+            cursor.execute("""
+                INSERT INTO detalle_factura (id_factura, id_producto, id_servicio, cantidad, precio_unitario, subtotal)
+                VALUES (%s, %s, NULL, %s, %s, %s)
+            """, (id_factura, id_producto, cantidad, precio_unitario, subtotal))
+            # si tienes trigger 'tr_update_stock' y 'tr_update_factura_total', se activarán aquí.
+
+        # Recalcular total por seguridad
+        cursor.execute("SELECT SUM(subtotal) AS suma FROM detalle_factura WHERE id_factura = %s", (id_factura,))
+        suma = cursor.fetchone()[0] or 0.00
+        cursor.execute("UPDATE factura SET total = %s WHERE id_factura = %s", (suma, id_factura))
+        conn.commit()
+
+    except Exception as e:
+        conn.rollback()
+        flash(f"Ocurrió un error al finalizar la compra: {str(e)}", "danger")
+        return redirect(url_for("routes.carrito_ver"))
+    finally:
+        cursor.close()
+        conn.close()
+
+    # Limpiar carrito y redirigir a página de confirmación
+    session.pop("carrito", None)
+    flash("Compra finalizada con éxito ✅", "success")
+    return redirect(url_for("routes.ver_factura", id_factura=id_factura))
+
+
+# --------------------------
+# RUTAS PARA FACTURAS (USUARIO)
+# --------------------------
+@routes.route("/mis_facturas")
+def mis_facturas():
+    if "usuario" not in session:
+        flash("Debes iniciar sesión para ver tus facturas", "warning")
+        return redirect(url_for("routes.login"))
+
+    id_usuario = session["usuario"]["numdocumento"]
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT f.id_factura, f.fecha_emision, f.total
+        FROM factura f
+        WHERE f.id_cliente = %s
+        ORDER BY f.fecha_emision DESC
+    """, (id_usuario,))
+    facturas = cursor.fetchall()
+    conn.close()
+    return render_template("mis_facturas.html", facturas=facturas)
+
+
+@routes.route("/factura/<int:id_factura>")
+def ver_factura(id_factura):
+    # Solo el cliente dueño de la factura (o admin) puede verla
+    if "usuario" not in session:
+        flash("Debes iniciar sesión para ver la factura", "warning")
+        return redirect(url_for("routes.login"))
+
+    id_usuario = session["usuario"]["numdocumento"]
+    is_admin = "admin" in session
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+
+    # verificar que la factura pertenezca al usuario (o permitir admin)
+    cursor.execute("SELECT id_cliente FROM factura WHERE id_factura = %s", (id_factura,))
+    fila = cursor.fetchone()
+    if not fila:
+        conn.close()
+        flash("Factura no encontrada ❌", "danger")
+        return redirect(url_for("routes.mis_facturas"))
+
+    if fila["id_cliente"] != id_usuario and not is_admin:
+        conn.close()
+        flash("No tienes permiso para ver esta factura ❌", "danger")
+        return redirect(url_for("routes.mis_facturas"))
+
+    # obtener detalles
+    cursor.execute("""
+        SELECT d.id_detalle, d.id_producto, p.tipo_producto, p.marca_producto, d.cantidad, d.precio_unitario, d.subtotal
+        FROM detalle_factura d
+        LEFT JOIN producto p ON d.id_producto = p.id_producto
+        WHERE d.id_factura = %s
+    """, (id_factura,))
+    detalles = cursor.fetchall()
+
+    # obtener encabezado
+    cursor.execute("SELECT id_factura, id_cliente, fecha_emision, total FROM factura WHERE id_factura = %s", (id_factura,))
+    factura = cursor.fetchone()
+
+    conn.close()
+    return render_template("ver_factura.html", factura=factura, detalles=detalles)

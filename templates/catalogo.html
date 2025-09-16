@@ -35,7 +35,7 @@
             </tr>
             {% endfor %}
         </tbody>
-    </table>
+</table>
 
     <!-- Productos -->
     <h3 class="mt-5 mb-3">🛠️ Productos</h3>
@@ -47,6 +47,7 @@
                 <th>Marca</th>
                 <th>Precio</th>
                 <th>Stock</th>
+                <th>Acción</th>
             </tr>
         </thead>
         <tbody>
@@ -63,13 +64,30 @@
                         <span class="text-danger">Agotado</span>
                     {% endif %}
                 </td>
+                <td>
+                    {% if p.stock_producto > 0 %}
+                        {% if session.get("usuario") and session["usuario"]["rol"] == "cliente" %}
+                            <a href="{{ url_for('routes.carrito_agregar', id_producto=p.id_producto) }}" 
+                               class="btn btn-success btn-sm">🛒 Añadir</a>
+                        {% else %}
+                            <span class="text-muted">Solo clientes</span>
+                        {% endif %}
+                    {% else %}
+                        <span class="text-muted">No disponible</span>
+                    {% endif %}
+                </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="5" class="text-center text-muted">No hay productos publicados</td>
+                <td colspan="6" class="text-center text-muted">No hay productos publicados</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+
+    <!-- Botón para ver carrito -->
+    <div class="mt-3 text-end">
+        <a href="{{ url_for('routes.carrito_ver') }}" class="btn btn-primary">Ver Carrito 🛒</a>
+    </div>
 </div>
 {% endblock %}

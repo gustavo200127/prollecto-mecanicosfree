@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4">🛒 Tu Carrito</h2>
+
+    {% if carrito %}
+    <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>Producto</th>
+                <th>Precio</th>
+                <th>Cantidad</th>
+                <th>Subtotal</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in carrito %}
+            <tr>
+                <td>{{ item.nombre }}</td>
+                <td>${{ item.precio }}</td>
+                <td>{{ item.cantidad }}</td>
+                <td>${{ item.precio * item.cantidad }}</td>
+                <td>
+                    <a href="{{ url_for('routes.carrito_eliminar', id_producto=item.id_producto) }}" 
+                       class="btn btn-danger btn-sm">❌ Eliminar</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="d-flex justify-content-between align-items-center">
+        <h4>Total: ${{ total }}</h4>
+        <div>
+            <a href="{{ url_for('routes.catalogo') }}" class="btn btn-secondary">⬅ Seguir Comprando</a>
+            <a href="{{ url_for('routes.finalizar_compra') }}" class="btn btn-success">Finalizar Compra ✅</a>
+        </div>
+    </div>
+
+    {% else %}
+        <p class="text-muted">Tu carrito está vacío.</p>
+        <a href="{{ url_for('routes.catalogo') }}" class="btn btn-primary">Ir al Catálogo</a>
+    {% endif %}
+</div>
+{% endblock %}
