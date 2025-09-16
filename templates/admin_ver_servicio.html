@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>🛠️ Detalle del Servicio</h2>
+    <ul class="list-group">
+        <li class="list-group-item"><strong>ID:</strong> {{ servicio.id_servicio }}</li>
+        <li class="list-group-item"><strong>Tipo:</strong> {{ servicio.tipo_servicio }}</li>
+        <li class="list-group-item"><strong>Precio:</strong> ${{ servicio.precio }}</li>
+        <li class="list-group-item"><strong>Disponibilidad:</strong> {{ "Sí" if servicio.disponibilidad else "No" }}</li>
+        <li class="list-group-item"><strong>Taller:</strong> {{ servicio.taller }} ({{ servicio.correoElectronico }})</li>
+    </ul>
+    <a href="{{ url_for('routes.admin_publicaciones') }}" class="btn btn-secondary mt-3">Volver</a>
+</div>
+{% endblock %}

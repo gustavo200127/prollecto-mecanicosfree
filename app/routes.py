@@ -29,7 +29,6 @@ def catalogo():
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
 
-    # Productos con nombre del taller
     cursor.execute("""
         SELECT p.*, u.nombre_usu AS taller
         FROM producto p
@@ -37,7 +36,6 @@ def catalogo():
     """)
     productos = cursor.fetchall()
 
-    # Servicios con nombre del taller
     cursor.execute("""
         SELECT s.*, u.nombre_usu AS taller
         FROM servicio s
@@ -49,7 +47,6 @@ def catalogo():
     conn.close()
 
     return render_template("catalogo.html", productos=productos, servicios=servicios)
-
 
 # --------------------------
 # LOGIN USUARIO (cliente / taller)
@@ -169,7 +166,6 @@ def registrar_usuario():
         conn = conectar_db()
         cursor = conn.cursor(dictionary=True)
 
-        # Verificar si ya existe documento o correo
         cursor.execute(
             "SELECT * FROM usuario WHERE numdocumento=%s OR correoElectronico=%s",
             (numdocumento, correoElectronico)
@@ -181,7 +177,6 @@ def registrar_usuario():
             conn.close()
             return redirect(url_for("routes.registrar_usuario"))
 
-        # Insertar usuario
         cursor = conn.cursor()
         cursor.execute(
             "INSERT INTO usuario (numdocumento, nombre_usu, correoElectronico, contrasena) VALUES (%s, %s, %s, %s)",
@@ -189,10 +184,9 @@ def registrar_usuario():
         )
         conn.commit()
 
-        # Asignar rol automáticamente
         rol = request.form.get("rol", "cliente")
         if rol == "taller":
-            rol = "pendiente_taller"  # Para que un admin luego lo apruebe
+            rol = "taller"
         else:
             rol = "cliente"
 
@@ -204,7 +198,7 @@ def registrar_usuario():
         conn.close()
 
         flash("Usuario registrado con éxito ✅", "success")
-        return redirect(url_for("routes.login"))  # Enviar al login después del registro
+        return redirect(url_for("routes.login"))
 
     return render_template("registrar_usuario.html")
 
@@ -241,9 +235,6 @@ def login_admin():
 
     return render_template("admin_login.html")
 
-# --------------------------
-# PANEL ADMIN
-# --------------------------
 @routes.route("/admin/dashboard")
 def admin_dashboard():
     if "admin" not in session:
@@ -252,16 +243,32 @@ def admin_dashboard():
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT r.id_rol, r.numdocumento, u.nombre_usu, u.correoElectronico
-        FROM rol r
-        JOIN usuario u ON r.numdocumento = u.numdocumento
-        WHERE r.tipoRol = 'pendiente_taller'
-    """)
-    solicitudes = cursor.fetchall()
+
+    # Total de usuarios
+    cursor.execute("SELECT COUNT(*) AS total FROM usuario")
+    total_usuarios = cursor.fetchone()["total"]
+
+    # Total de talleres (rol = 'taller')
+    cursor.execute("SELECT COUNT(*) AS total FROM rol WHERE tipoRol = 'taller'")
+    total_talleres = cursor.fetchone()["total"]
+
+    # Total de productos
+    cursor.execute("SELECT COUNT(*) AS total FROM producto")
+    total_productos = cursor.fetchone()["total"]
+
+    # Total de servicios
+    cursor.execute("SELECT COUNT(*) AS total FROM servicio")
+    total_servicios = cursor.fetchone()["total"]
+
     conn.close()
 
-    return render_template("admin_dashboard.html", solicitudes=solicitudes)
+    return render_template(
+        "admin_dashboard.html",
+        total_usuarios=total_usuarios,
+        total_talleres=total_talleres,
+        total_productos=total_productos,
+        total_servicios=total_servicios
+    )
 
 # --------------------------
 # LOGOUT ADMIN
@@ -271,39 +278,6 @@ def admin_logout():
     session.pop("admin", None)
     flash("Sesión de administrador cerrada ✅", "info")
     return redirect(url_for("routes.login_admin"))
-
-# --------------------------
-# APROBAR / RECHAZAR TALLER
-# --------------------------
-@routes.route("/admin/taller/aprobar/<numdocumento>")
-def aprobar_taller(numdocumento):
-    if "admin" not in session:
-        flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
-
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE rol SET tipoRol = 'taller' WHERE numdocumento = %s", (numdocumento,))
-    conn.commit()
-    conn.close()
-
-    flash("Taller aprobado ✅", "success")
-    return redirect(url_for("routes.admin_dashboard"))
-
-@routes.route("/admin/taller/rechazar/<numdocumento>")
-def rechazar_taller(numdocumento):
-    if "admin" not in session:
-        flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
-
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE rol SET tipoRol = 'cliente' WHERE numdocumento = %s", (numdocumento,))
-    conn.commit()
-    conn.close()
-
-    flash("Taller rechazado ❌", "info")
-    return redirect(url_for("routes.admin_dashboard"))
 
 # --------------------------
 # EDITAR USUARIO (ADMIN)
@@ -380,7 +354,17 @@ def admin_productos():
         flash("Debes iniciar sesión como administrador", "warning")
         return redirect(url_for("routes.login_admin"))
 
-    return render_template("admin_productos.html")
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT p.*, u.nombre_usu AS taller
+        FROM producto p
+        JOIN usuario u ON p.id_usutaller = u.numdocumento
+    """)
+    productos = cursor.fetchall()
+    conn.close()
+
+    return render_template("admin_productos.html", productos=productos)
 
 # --------------------------
 # ADMIN - SERVICIOS
@@ -391,7 +375,17 @@ def admin_servicios():
         flash("Debes iniciar sesión como administrador", "warning")
         return redirect(url_for("routes.login_admin"))
 
-    return render_template("admin_servicios.html")
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT s.*, u.nombre_usu AS taller
+        FROM servicio s
+        JOIN usuario u ON s.id_usutaller = u.numdocumento
+    """)
+    servicios = cursor.fetchall()
+    conn.close()
+
+    return render_template("admin_servicios.html", servicios=servicios)
 
 # --------------------------
 # AGREGAR SERVICIO (TALLER)
@@ -422,7 +416,6 @@ def agregar_servicio():
 
     return render_template("agregar_servicio.html")
 
-
 # --------------------------
 # AGREGAR PRODUCTO (TALLER)
 # --------------------------
@@ -444,12 +437,12 @@ def agregar_producto():
             INSERT INTO producto (id_usutaller, tipo_producto, marca_producto, precio_producto, stock_producto, publicado)
             VALUES (%s, %s, %s, %s, %s, %s)
         """, (
-            session["usuario"]["numdocumento"],  # el taller dueño del producto
+            session["usuario"]["numdocumento"],
             tipo_producto,
             marca_producto,
             precio_producto,
             stock_producto,
-            "publicado"  # por defecto, lo dejamos publicado
+            "publicado"
         ))
         conn.commit()
         cursor.close()
@@ -487,3 +480,102 @@ def agregar_vehiculo():
         return redirect(url_for("routes.perfil_cliente"))
 
     return render_template("agregar_vehiculo.html")
+
+# --------------------------
+# ADMIN - PUBLICACIONES
+# --------------------------
+@routes.route("/admin/publicaciones")
+def admin_publicaciones():
+    if "admin" not in session:
+        flash("Debes iniciar sesión como administrador", "warning")
+        return redirect(url_for("routes.login_admin"))
+
+    tipo = request.args.get("tipo")
+    fecha_inicio = request.args.get("fecha_inicio")
+    fecha_fin = request.args.get("fecha_fin")
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+
+    query = """
+        SELECT rp.id_registro, rp.tipo, rp.id_referencia,
+               DATE_FORMAT(rp.fecha_registro, '%d-%m-%Y %H:%i:%s') AS fecha_registro,
+               rp.estado,
+               u.nombre_usu AS taller, u.correoElectronico
+        FROM registro_publicaciones rp
+        JOIN usuario u ON rp.id_usutaller = u.numdocumento
+        WHERE 1=1
+    """
+    params = []
+
+    if tipo and tipo != "todos":
+        query += " AND rp.tipo = %s"
+        params.append(tipo)
+
+    if fecha_inicio:
+        query += " AND rp.fecha_registro >= %s"
+        params.append(fecha_inicio + " 00:00:00")
+
+    if fecha_fin:
+        query += " AND rp.fecha_registro <= %s"
+        params.append(fecha_fin + " 23:59:59")
+
+    query += " ORDER BY rp.fecha_registro DESC"
+
+    cursor.execute(query, params)
+    registros = cursor.fetchall()
+    conn.close()
+
+    return render_template("admin_publicaciones.html", registros=registros, tipo=tipo, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin)
+
+# --------------------------
+# ADMIN - VER DETALLE PRODUCTO
+# --------------------------
+@routes.route("/admin/producto/<int:id_producto>")
+def admin_ver_producto(id_producto):
+    if "admin" not in session:
+        flash("Debes iniciar sesión como administrador", "warning")
+        return redirect(url_for("routes.login_admin"))
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT p.*, u.nombre_usu AS taller, u.correoElectronico
+        FROM producto p
+        JOIN usuario u ON p.id_usutaller = u.numdocumento
+        WHERE p.id_producto = %s
+    """, (id_producto,))
+    producto = cursor.fetchone()
+    conn.close()
+
+    if not producto:
+        flash("Producto no encontrado ❌", "danger")
+        return redirect(url_for("routes.admin_publicaciones"))
+
+    return render_template("admin_ver_producto.html", producto=producto)
+
+# --------------------------
+# ADMIN - VER DETALLE SERVICIO
+# --------------------------
+@routes.route("/admin/servicio/<int:id_servicio>")
+def admin_ver_servicio(id_servicio):
+    if "admin" not in session:
+        flash("Debes iniciar sesión como administrador", "warning")
+        return redirect(url_for("routes.login_admin"))
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT s.*, u.nombre_usu AS taller, u.correoElectronico
+        FROM servicio s
+        JOIN usuario u ON s.id_usutaller = u.numdocumento
+        WHERE s.id_servicio = %s
+    """, (id_servicio,))
+    servicio = cursor.fetchone()
+    conn.close()
+
+    if not servicio:
+        flash("Servicio no encontrado ❌", "danger")
+        return redirect(url_for("routes.admin_publicaciones"))
+
+    return render_template("admin_ver_servicio.html", servicio=servicio)

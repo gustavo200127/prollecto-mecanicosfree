@@ -1,0 +1,18 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>📦 Detalle del Producto</h2>
+    <ul class="list-group">
+        <li class="list-group-item"><strong>ID:</strong> {{ producto.id_producto }}</li>
+        <li class="list-group-item"><strong>Código:</strong> {{ producto.codigo_producto }}</li>
+        <li class="list-group-item"><strong>Tipo:</strong> {{ producto.tipo_producto }}</li>
+        <li class="list-group-item"><strong>Marca:</strong> {{ producto.marca_producto }}</li>
+        <li class="list-group-item"><strong>Precio:</strong> ${{ producto.precio_producto }}</li>
+        <li class="list-group-item"><strong>Stock:</strong> {{ producto.stock_producto }}</li>
+        <li class="list-group-item"><strong>Taller:</strong> {{ producto.taller }} ({{ producto.correoElectronico }})</li>
+        <li class="list-group-item"><strong>Fecha publicación:</strong> {{ producto.fecha_publicacion }}</li>
+    </ul>
+    <a href="{{ url_for('routes.admin_publicaciones') }}" class="btn btn-secondary mt-3">Volver</a>
+</div>
+{% endblock %}
