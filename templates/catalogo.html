@@ -13,6 +13,7 @@
                 <th>Servicio</th>
                 <th>Precio</th>
                 <th>Disponibilidad</th>
+                <th>Acción</th>
             </tr>
         </thead>
         <tbody>
@@ -28,10 +29,19 @@
                         <span class="badge bg-danger">No disponible</span>
                     {% endif %}
                 </td>
+                <td>
+                    {% if s.disponibilidad == 1 and session.get("usuario") and session["usuario"]["rol"] in ["cliente", "taller"] %}
+                        <form action="{{ url_for('routes.carrito_agregar_servicio', id_servicio=s.id_servicio) }}" method="post">
+                            <button type="submit" class="btn btn-primary btn-sm">🛒 Añadir</button>
+                        </form>
+                    {% else %}
+                        <span class="text-muted">Solo clientes/talleres</span>
+                    {% endif %}
+                </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="4" class="text-center text-muted">No hay servicios disponibles</td>
+                <td colspan="5" class="text-center text-muted">No hay servicios disponibles</td>
             </tr>
             {% endfor %}
         </tbody>

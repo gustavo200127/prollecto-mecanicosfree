@@ -594,7 +594,7 @@ def carrito_agregar(id_producto):
     # cantidad enviada desde el formulario
     try:
         cantidad = int(request.form.get("cantidad", 1))
-    except ValueError:
+    except (ValueError, TypeError):
         cantidad = 1
 
     if cantidad <= 0:
@@ -625,7 +625,7 @@ def carrito_agregar(id_producto):
 
     # Revisar si ya está en el carrito -> aumentar cantidad
     for item in session["carrito"]:
-        if item["id_producto"] == producto["id_producto"]:
+        if item.get("tipo") == "producto" and item.get("id_producto") == producto["id_producto"]:
             if item["cantidad"] + cantidad > producto["stock_producto"]:
                 flash(f"No puedes agregar más de {producto['stock_producto']} unidades ❌", "danger")
                 return redirect(url_for("routes.catalogo"))
@@ -633,6 +633,7 @@ def carrito_agregar(id_producto):
             break
     else:
         session["carrito"].append({
+            "tipo": "producto",
             "id_producto": producto["id_producto"],
             "nombre": f"{producto['tipo_producto']} - {producto['marca_producto']}",
             "precio": float(producto["precio_producto"]),
@@ -643,6 +644,57 @@ def carrito_agregar(id_producto):
     flash(f"{cantidad} unidad(es) agregada(s) al carrito 🛒", "success")
     return redirect(url_for("routes.catalogo"))
 
+
+# --------------------------
+# AGREGAR SERVICIO AL CARRITO (1 en 1)
+# --------------------------
+@routes.route("/carrito/agregar_servicio/<int:id_servicio>", methods=["POST"])
+def carrito_agregar_servicio(id_servicio):
+    if "usuario" not in session or session["usuario"]["rol"] not in ["cliente", "taller"]:
+        flash("Debes iniciar sesión como cliente o taller para pedir un servicio ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    # Los servicios SIEMPRE se agregan de 1 en 1
+    cantidad = 1  
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id_servicio, tipo_servicio, precio, disponibilidad
+        FROM servicio
+        WHERE id_servicio=%s
+    """, (id_servicio,))
+    servicio = cursor.fetchone()
+    conn.close()
+
+    if not servicio:
+        flash("Servicio no encontrado ❌", "danger")
+        return redirect(url_for("routes.catalogo"))
+
+    if servicio.get("disponibilidad") != 1:
+        flash("Este servicio no está disponible ❌", "danger")
+        return redirect(url_for("routes.catalogo"))
+
+    if "carrito" not in session:
+        session["carrito"] = []
+
+    # Revisar si ya está en el carrito -> sumar 1
+    for item in session["carrito"]:
+        if item.get("tipo") == "servicio" and item.get("id_servicio") == servicio["id_servicio"]:
+            item["cantidad"] += 1
+            break
+    else:
+        session["carrito"].append({
+            "tipo": "servicio",
+            "id_servicio": servicio["id_servicio"],
+            "nombre": servicio["tipo_servicio"],
+            "precio": float(servicio["precio"]),
+            "cantidad": 1
+        })
+
+    session.modified = True
+    flash("Servicio agregado al carrito 🛒", "success")
+    return redirect(url_for("routes.catalogo"))
 
 
 # --------------------------
@@ -656,19 +708,28 @@ def carrito_ver():
 
 
 # --------------------------
-# ELIMINAR PRODUCTO DEL CARRITO
+# ELIMINAR ITEM DEL CARRITO (producto o servicio)
 # --------------------------
-@routes.route("/carrito/eliminar/<int:id_producto>")
-def carrito_eliminar(id_producto):
+@routes.route("/carrito/eliminar/<tipo>/<int:id_item>")
+def carrito_eliminar(tipo, id_item):
     if "carrito" in session:
-        session["carrito"] = [item for item in session["carrito"] if item["id_producto"] != id_producto]
+        if tipo == "producto":
+            session["carrito"] = [
+                item for item in session["carrito"]
+                if not (item.get("tipo") == "producto" and item.get("id_producto") == id_item)
+            ]
+        elif tipo == "servicio":
+            session["carrito"] = [
+                item for item in session["carrito"]
+                if not (item.get("tipo") == "servicio" and item.get("id_servicio") == id_item)
+            ]
         session.modified = True
-        flash("Producto eliminado del carrito ❌", "info")
+        flash("Item eliminado del carrito ❌", "info")
     return redirect(url_for("routes.carrito_ver"))
 
 
 # --------------------------
-# FINALIZAR COMPRA -> crear factura y detalle_factura
+# FINALIZAR COMPRA -> crear factura y detalle_factura (maneja productos y servicios)
 # --------------------------
 @routes.route("/carrito/finalizar", methods=["GET", "POST"])
 def finalizar_compra():
@@ -706,18 +767,29 @@ def finalizar_compra():
         conn.commit()
         id_factura = cursor.lastrowid
 
-        # Insertar cada item en detalle_factura
+        # Insertar cada item en detalle_factura (producto o servicio)
         for item in carrito:
-            id_producto = item["id_producto"]
             cantidad = int(item["cantidad"])
             precio_unitario = float(item["precio"])
             subtotal = round(precio_unitario * cantidad, 2)
 
-            cursor.execute("""
-                INSERT INTO detalle_factura (id_factura, id_producto, id_servicio, cantidad, precio_unitario, subtotal)
-                VALUES (%s, %s, NULL, %s, %s, %s)
-            """, (id_factura, id_producto, cantidad, precio_unitario, subtotal))
-            # si tienes trigger 'tr_update_stock' y 'tr_update_factura_total', se activarán aquí.
+            if item.get("tipo") == "producto":
+                id_producto = item.get("id_producto")
+                # insertar con id_servicio NULL
+                cursor.execute("""
+                    INSERT INTO detalle_factura (id_factura, id_producto, id_servicio, cantidad, precio_unitario, subtotal)
+                    VALUES (%s, %s, NULL, %s, %s, %s)
+                """, (id_factura, id_producto, cantidad, precio_unitario, subtotal))
+
+            elif item.get("tipo") == "servicio":
+                id_servicio = item.get("id_servicio")
+                # insertar con id_producto NULL
+                cursor.execute("""
+                    INSERT INTO detalle_factura (id_factura, id_producto, id_servicio, cantidad, precio_unitario, subtotal)
+                    VALUES (%s, NULL, %s, %s, %s, %s)
+                """, (id_factura, id_servicio, cantidad, precio_unitario, subtotal))
+
+            # si tienes triggers tr_update_stock y tr_update_factura_total, se activarán aquí.
 
         # Recalcular total por seguridad
         cursor.execute("SELECT SUM(subtotal) AS suma FROM detalle_factura WHERE id_factura = %s", (id_factura,))
@@ -735,6 +807,7 @@ def finalizar_compra():
 
     # Limpiar carrito y redirigir a página de confirmación
     session.pop("carrito", None)
+    session.modified = True
     flash("Compra finalizada con éxito ✅", "success")
     return redirect(url_for("routes.ver_factura", id_factura=id_factura))
 
@@ -788,11 +861,15 @@ def ver_factura(id_factura):
         flash("No tienes permiso para ver esta factura ❌", "danger")
         return redirect(url_for("routes.mis_facturas"))
 
-    # obtener detalles
+    # obtener detalles (productos y servicios)
     cursor.execute("""
-        SELECT d.id_detalle, d.id_producto, p.tipo_producto, p.marca_producto, d.cantidad, d.precio_unitario, d.subtotal
+        SELECT d.id_detalle,
+               d.id_producto, p.tipo_producto AS producto_nombre, p.marca_producto,
+               d.id_servicio, s.tipo_servicio AS servicio_nombre,
+               d.cantidad, d.precio_unitario, d.subtotal
         FROM detalle_factura d
         LEFT JOIN producto p ON d.id_producto = p.id_producto
+        LEFT JOIN servicio s ON d.id_servicio = s.id_servicio
         WHERE d.id_factura = %s
     """, (id_factura,))
     detalles = cursor.fetchall()
