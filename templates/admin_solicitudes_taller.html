@@ -1,0 +1,49 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>📋 Solicitudes de Taller Pendientes</h2>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  {% if solicitudes %}
+    <div class="table-responsive">
+      <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+          <tr>
+            <th>Documento</th>
+            <th>Nombre</th>
+            <th>Correo</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in solicitudes %}
+          <tr>
+            <td>{{ s.numdocumento }}</td>
+            <td>{{ s.nombre_usu }}</td>
+            <td>{{ s.correoElectronico }}</td>
+            <td>
+              <a href="{{ url_for('routes.aceptar_taller', numdocumento=s.numdocumento) }}" 
+                 class="btn btn-success btn-sm">Aceptar</a>
+              <a href="{{ url_for('routes.rechazar_taller', numdocumento=s.numdocumento) }}" 
+                 class="btn btn-danger btn-sm">Rechazar</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-muted">No hay solicitudes pendientes en este momento.</p>
+  {% endif %}
+</div>
+{% endblock %}

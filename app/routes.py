@@ -186,7 +186,7 @@ def registrar_usuario():
 
         rol = request.form.get("rol", "cliente")
         if rol == "taller":
-            rol = "taller"
+            rol = "pendiente_taller"   # 👈 ahora queda en revisión
         else:
             rol = "cliente"
 
@@ -580,6 +580,69 @@ def admin_ver_servicio(id_servicio):
 
     return render_template("admin_ver_servicio.html", servicio=servicio)
 
+    # --------------------------
+# ADMIN - SOLICITUDES DE TALLER
+# --------------------------
+@routes.route("/admin/solicitudes_taller")
+def solicitudes_taller():
+    if "admin" not in session:
+        flash("Debes iniciar sesión como administrador", "warning")
+        return redirect(url_for("routes.login_admin"))
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, r.tipoRol
+        FROM usuario u
+        JOIN rol r ON u.numdocumento = r.numdocumento
+        WHERE r.tipoRol = 'pendiente_taller'
+    """)
+    solicitudes = cursor.fetchall()
+    conn.close()
+
+    return render_template("admin_solicitudes_taller.html", solicitudes=solicitudes)
+
+
+# --------------------------
+# ADMIN - ACEPTAR TALLER
+# --------------------------
+@routes.route("/admin/solicitudes_taller/aceptar/<int:numdocumento>")
+def aceptar_taller(numdocumento):
+    if "admin" not in session:
+        flash("Debes iniciar sesión como administrador", "warning")
+        return redirect(url_for("routes.login_admin"))
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE rol SET tipoRol = 'taller' WHERE numdocumento = %s", (numdocumento,))
+    conn.commit()
+    conn.close()
+
+    flash("Taller aprobado con éxito ✅", "success")
+    return redirect(url_for("routes.solicitudes_taller"))
+
+
+# --------------------------
+# ADMIN - RECHAZAR TALLER
+# --------------------------
+@routes.route("/admin/solicitudes_taller/rechazar/<int:numdocumento>")
+def rechazar_taller(numdocumento):
+    if "admin" not in session:
+        flash("Debes iniciar sesión como administrador", "warning")
+        return redirect(url_for("routes.login_admin"))
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+    # eliminamos el rol y el usuario
+    cursor.execute("DELETE FROM rol WHERE numdocumento = %s", (numdocumento,))
+    cursor.execute("DELETE FROM usuario WHERE numdocumento = %s", (numdocumento,))
+    conn.commit()
+    conn.close()
+
+    flash("Solicitud de taller rechazada ❌", "info")
+    return redirect(url_for("routes.solicitudes_taller"))
+
+
 
 # --------------------------
 # AGREGAR PRODUCTO AL CARRITO (permitir cliente o taller)
@@ -728,17 +791,13 @@ def carrito_eliminar(tipo, id_item):
     return redirect(url_for("routes.carrito_ver"))
 
 
-# --------------------------
-# FINALIZAR COMPRA -> crear factura y detalle_factura (maneja productos y servicios)
-# --------------------------
 @routes.route("/carrito/finalizar", methods=["GET", "POST"])
 def finalizar_compra():
-    # Solo clientes o talleres pueden comprar
     if "usuario" not in session or session["usuario"]["rol"] not in ["cliente", "taller"]:
         flash("Debes iniciar sesión como cliente o taller para comprar ❌", "danger")
         return redirect(url_for("routes.login"))
 
-    # Validación: clientes deben tener vehículo registrado
+    # Validar que cliente tenga vehículo
     if session["usuario"]["rol"] == "cliente":
         conn = conectar_db()
         cursor = conn.cursor()
@@ -758,58 +817,44 @@ def finalizar_compra():
         flash("Tu carrito está vacío 🛒", "info")
         return redirect(url_for("routes.catalogo"))
 
-    # Crear factura (encabezado)
     conn = conectar_db()
     cursor = conn.cursor()
+
     try:
         id_cliente = session["usuario"]["numdocumento"]
-        cursor.execute("INSERT INTO factura (id_cliente, total) VALUES (%s, %s)", (id_cliente, 0.00))
-        conn.commit()
-        id_factura = cursor.lastrowid
 
-        # Insertar cada item en detalle_factura (producto o servicio)
+        # 👉 solo soportamos UN producto por compra en este flujo
         for item in carrito:
-            cantidad = int(item["cantidad"])
-            precio_unitario = float(item["precio"])
-            subtotal = round(precio_unitario * cantidad, 2)
-
             if item.get("tipo") == "producto":
-                id_producto = item.get("id_producto")
-                # insertar con id_servicio NULL
                 cursor.execute("""
-                    INSERT INTO detalle_factura (id_factura, id_producto, id_servicio, cantidad, precio_unitario, subtotal)
-                    VALUES (%s, %s, NULL, %s, %s, %s)
-                """, (id_factura, id_producto, cantidad, precio_unitario, subtotal))
+                    INSERT INTO compra (taller_produc, producto_selec, cantidad, direccion_entrega, id_usucliente)
+                    VALUES (
+                        (SELECT u.nombre_usu FROM usuario u JOIN producto p ON u.numdocumento = p.id_usutaller WHERE p.id_producto=%s),
+                        %s, %s, %s, %s
+                    )
+                """, (
+                    item["id_producto"],
+                    item["id_producto"],
+                    item["cantidad"],
+                    "Sin dirección",  # puedes pedir dirección en el formulario
+                    id_cliente
+                ))
 
-            elif item.get("tipo") == "servicio":
-                id_servicio = item.get("id_servicio")
-                # insertar con id_producto NULL
-                cursor.execute("""
-                    INSERT INTO detalle_factura (id_factura, id_producto, id_servicio, cantidad, precio_unitario, subtotal)
-                    VALUES (%s, NULL, %s, %s, %s, %s)
-                """, (id_factura, id_servicio, cantidad, precio_unitario, subtotal))
-
-            # si tienes triggers tr_update_stock y tr_update_factura_total, se activarán aquí.
-
-        # Recalcular total por seguridad
-        cursor.execute("SELECT SUM(subtotal) AS suma FROM detalle_factura WHERE id_factura = %s", (id_factura,))
-        suma = cursor.fetchone()[0] or 0.00
-        cursor.execute("UPDATE factura SET total = %s WHERE id_factura = %s", (suma, id_factura))
         conn.commit()
+        flash("Compra registrada ✅. Esperando confirmación del taller.", "success")
 
     except Exception as e:
         conn.rollback()
         flash(f"Ocurrió un error al finalizar la compra: {str(e)}", "danger")
-        return redirect(url_for("routes.carrito_ver"))
     finally:
         cursor.close()
         conn.close()
 
-    # Limpiar carrito y redirigir a página de confirmación
+    # limpiar carrito
     session.pop("carrito", None)
     session.modified = True
-    flash("Compra finalizada con éxito ✅", "success")
-    return redirect(url_for("routes.ver_factura", id_factura=id_factura))
+
+    return redirect(url_for("routes.perfil_cliente"))
 
 
 # --------------------------
@@ -880,3 +925,51 @@ def ver_factura(id_factura):
 
     conn.close()
     return render_template("ver_factura.html", factura=factura, detalles=detalles)
+
+# --------------------------
+# PETICIONES DE COMPRA (TALLER)
+# --------------------------
+@routes.route("/taller/peticiones")
+def ver_peticiones_taller():
+    if "usuario" not in session or session["usuario"]["rol"] != "taller":
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    id_taller = session["usuario"]["numdocumento"]
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT pc.id_peticion, c.id_compra, u.nombre_usu AS cliente, p.tipo_producto, c.cantidad, pc.estado, pc.fecha
+        FROM peticion_compra pc
+        JOIN compra c ON pc.id_compra = c.id_compra
+        JOIN usuario u ON c.id_usucliente = u.numdocumento
+        JOIN producto p ON c.producto_selec = p.id_producto
+        WHERE pc.id_taller = %s
+        ORDER BY pc.fecha DESC
+    """, (id_taller,))
+    peticiones = cursor.fetchall()
+    conn.close()
+
+    return render_template("peticiones_taller.html", peticiones=peticiones)
+
+
+@routes.route("/peticiones/<int:id_peticion>/confirmar", methods=["POST"])
+def confirmar_peticion(id_peticion):
+    if "usuario" not in session or session["usuario"]["rol"] != "taller":
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    estado = request.form.get("estado")  # aprobada o rechazada
+    if estado not in ["aprobada", "rechazada"]:
+        flash("Estado inválido ❌", "danger")
+        return redirect(url_for("routes.ver_peticiones_taller"))
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE peticion_compra SET estado = %s WHERE id_peticion = %s", (estado, id_peticion))
+    conn.commit()
+    conn.close()
+
+    flash(f"Petición {estado} con éxito ✅", "success")
+    return redirect(url_for("routes.ver_peticiones_taller"))
