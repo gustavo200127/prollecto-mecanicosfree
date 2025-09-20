@@ -13,6 +13,9 @@
       {% endfor %}
     {% endif %}
   {% endwith %}
+  <div class="mb-3">
+    <a href="{{ url_for('routes.admin_dashboard') }}" class="btn btn-secondary">⬅ Volver al Panel Admin</a>
+</div>
 
   {% if solicitudes %}
     <div class="table-responsive">

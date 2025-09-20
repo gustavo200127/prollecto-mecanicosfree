@@ -60,7 +60,7 @@ def login():
         conn = conectar_db()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, r.tipoRol
+            SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, u.activo, r.tipoRol
             FROM usuario u
             JOIN rol r ON u.numdocumento = r.numdocumento
             WHERE u.correoElectronico=%s AND u.contrasena=%s
@@ -69,6 +69,12 @@ def login():
         conn.close()
 
         if usuario:
+            # Verificar si el usuario está activo
+            if not usuario["activo"]:
+                flash("Tu cuenta ha sido deshabilitada ❌", "danger")
+                return redirect(url_for("routes.login"))
+
+            # Guardar sesión
             session["usuario"] = {
                 "numdocumento": usuario["numdocumento"],
                 "nombre_usu": usuario["nombre_usu"],
@@ -77,6 +83,7 @@ def login():
             }
             flash("Inicio de sesión exitoso ✅", "success")
 
+            # Redirigir según rol
             if usuario["tipoRol"] == "taller":
                 return redirect(url_for("routes.perfil_taller"))
             else:
@@ -131,11 +138,14 @@ def usuarios():
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
 
+    # Contar total de usuarios
     cursor.execute("SELECT COUNT(*) as total FROM usuario")
     total = cursor.fetchone()["total"]
 
+    # Traer usuarios con rol y estado (activo)
     cursor.execute("""
-        SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, r.tipoRol
+        SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, 
+               r.tipoRol, u.activo
         FROM usuario u
         LEFT JOIN rol r ON u.numdocumento = r.numdocumento
         LIMIT %s OFFSET %s
@@ -151,6 +161,7 @@ def usuarios():
         page=page,
         total_pages=total_pages
     )
+
 
 # --------------------------
 # REGISTRAR USUARIO (PÚBLICO)
@@ -327,23 +338,43 @@ def editar_usuario(numdocumento):
     return render_template("editar_usuario.html", usuario=usuario)
 
 # --------------------------
-# ELIMINAR USUARIO (ADMIN)
+# DESHABILITAR / HABILITAR USUARIO (ADMIN)
 # --------------------------
-@routes.route("/usuarios/eliminar/<numdocumento>", methods=["GET", "POST"])
-def eliminar_usuario(numdocumento):
+@routes.route("/usuarios/toggle/<numdocumento>", methods=["POST"])
+def toggle_usuario(numdocumento):
     if "admin" not in session:
         flash("Debes iniciar sesión como administrador", "warning")
         return redirect(url_for("routes.login_admin"))
 
     conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM rol WHERE numdocumento = %s", (numdocumento,))
-    cursor.execute("DELETE FROM usuario WHERE numdocumento = %s", (numdocumento,))
+    cursor = conn.cursor(dictionary=True)
+
+    # Consultar estado actual del usuario (forzar a 0 si es NULL)
+    cursor.execute("SELECT IFNULL(activo, 0) AS activo FROM usuario WHERE numdocumento = %s", (numdocumento,))
+    usuario = cursor.fetchone()
+
+    if not usuario:
+        conn.close()
+        flash("Usuario no encontrado ❌", "danger")
+        return redirect(url_for("routes.usuarios"))
+
+    # Convertir a entero sí o sí
+    estado_actual = int(usuario["activo"])
+
+    # Alternar estado
+    nuevo_estado = 0 if estado_actual == 1 else 1
+
+    cursor.execute("UPDATE usuario SET activo = %s WHERE numdocumento = %s", (nuevo_estado, numdocumento))
     conn.commit()
     conn.close()
 
-    flash("Usuario eliminado ✅", "success")
+    if nuevo_estado == 1:
+        flash("Usuario habilitado ✅", "success")
+    else:
+        flash("Usuario deshabilitado ❌", "warning")
+
     return redirect(url_for("routes.usuarios"))
+
 
 # --------------------------
 # ADMIN - PRODUCTOS

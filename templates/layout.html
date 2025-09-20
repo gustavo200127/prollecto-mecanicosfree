@@ -25,22 +25,19 @@
                     
                     <!-- Opciones de usuario logueado -->
                     {% if session.get('usuario') %}
+                        
                         {% if session['usuario']['rol'] == 'cliente' %}
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.perfil_cliente') }}">Perfil Cliente</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.logout') }}">Cerrar Sesión</a></li>
+
                         {% elif session['usuario']['rol'] == 'taller' %}
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.perfil_taller') }}">Perfil Taller</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.agregar_servicio') }}">Agregar Servicio</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.agregar_producto') }}">Agregar Producto</a></li>
+                            <!-- Taller solo ve cerrar sesión en la barra -->
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.logout') }}">Cerrar Sesión</a></li>
                         {% endif %}
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.logout') }}">Cerrar Sesión</a></li>
-                    
+
                     {% elif session.get('admin') %}
                         <!-- Opciones admin -->
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.admin_dashboard') }}">Panel Admin</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.usuarios') }}">Usuarios</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.solicitudes_taller') }}">Solicitudes Talleres</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.admin_productos') }}">Productos</a></li>
-                        <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.admin_servicios') }}">Servicios</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.admin_logout') }}">Cerrar Sesión</a></li>
                     
                     {% else %}

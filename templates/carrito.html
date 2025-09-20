@@ -48,5 +48,7 @@
     {% else %}
         <p class="text-center text-muted">Tu carrito está vacío 🛒</p>
     {% endif %}
+    <div class="mt-4">
+        <a href="{{ url_for('routes.catalogo') }}" class="btn btn-secondary">⬅ Seguir Comprando</a>
 </div>
 {% endblock %}
