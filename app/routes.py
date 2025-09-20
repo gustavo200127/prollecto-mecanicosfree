@@ -680,12 +680,10 @@ def rechazar_taller(numdocumento):
 # --------------------------
 @routes.route("/carrito/agregar/<int:id_producto>", methods=["POST"])
 def carrito_agregar(id_producto):
-    # permitir compras a clientes y talleres
     if "usuario" not in session or session["usuario"]["rol"] not in ["cliente", "taller"]:
         flash("Debes iniciar sesión como cliente o taller para comprar ❌", "danger")
         return redirect(url_for("routes.login"))
 
-    # cantidad enviada desde el formulario
     try:
         cantidad = int(request.form.get("cantidad", 1))
     except (ValueError, TypeError):
@@ -713,7 +711,6 @@ def carrito_agregar(id_producto):
         flash(f"Solo hay {producto['stock_producto']} unidades disponibles ❌", "danger")
         return redirect(url_for("routes.catalogo"))
 
-    # Inicializar carrito si no existe
     if "carrito" not in session:
         session["carrito"] = []
 
@@ -748,47 +745,37 @@ def carrito_agregar_servicio(id_servicio):
         flash("Debes iniciar sesión como cliente o taller para pedir un servicio ❌", "danger")
         return redirect(url_for("routes.login"))
 
-    # Los servicios SIEMPRE se agregan de 1 en 1
-    cantidad = 1  
-
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT id_servicio, tipo_servicio, precio, disponibilidad
-        FROM servicio
-        WHERE id_servicio=%s
-    """, (id_servicio,))
+    cursor.execute("SELECT id_servicio, tipo_servicio, precio, disponibilidad FROM servicio WHERE id_servicio=%s", (id_servicio,))
     servicio = cursor.fetchone()
     conn.close()
 
-    if not servicio:
-        flash("Servicio no encontrado ❌", "danger")
-        return redirect(url_for("routes.catalogo"))
-
-    if servicio.get("disponibilidad") != 1:
-        flash("Este servicio no está disponible ❌", "danger")
+    if not servicio or servicio["disponibilidad"] != 1:
+        flash("Servicio no disponible ❌", "danger")
         return redirect(url_for("routes.catalogo"))
 
     if "carrito" not in session:
         session["carrito"] = []
 
-    # Revisar si ya está en el carrito -> sumar 1
+    # Evitar duplicados: 1 por 1
     for item in session["carrito"]:
-        if item.get("tipo") == "servicio" and item.get("id_servicio") == servicio["id_servicio"]:
-            item["cantidad"] += 1
-            break
-    else:
-        session["carrito"].append({
-            "tipo": "servicio",
-            "id_servicio": servicio["id_servicio"],
-            "nombre": servicio["tipo_servicio"],
-            "precio": float(servicio["precio"]),
-            "cantidad": 1
-        })
+        if item.get("tipo") == "servicio" and item.get("id_servicio") == id_servicio:
+            flash("Este servicio ya está en el carrito ❌", "info")
+            return redirect(url_for("routes.catalogo"))
+
+    session["carrito"].append({
+        "tipo": "servicio",
+        "id_servicio": servicio["id_servicio"],
+        "nombre": servicio["tipo_servicio"],
+        "precio": float(servicio["precio"]),
+        "cantidad": 1
+    })
 
     session.modified = True
     flash("Servicio agregado al carrito 🛒", "success")
     return redirect(url_for("routes.catalogo"))
+
 
 
 # --------------------------
@@ -802,77 +789,86 @@ def carrito_ver():
 
 
 # --------------------------
-# ELIMINAR ITEM DEL CARRITO (producto o servicio)
+# ELIMINAR ITEM DEL CARRITO
 # --------------------------
 @routes.route("/carrito/eliminar/<tipo>/<int:id_item>")
 def carrito_eliminar(tipo, id_item):
     if "carrito" in session:
         if tipo == "producto":
-            session["carrito"] = [
-                item for item in session["carrito"]
-                if not (item.get("tipo") == "producto" and item.get("id_producto") == id_item)
-            ]
+            session["carrito"] = [item for item in session["carrito"] if not (item.get("tipo")=="producto" and item.get("id_producto")==id_item)]
         elif tipo == "servicio":
-            session["carrito"] = [
-                item for item in session["carrito"]
-                if not (item.get("tipo") == "servicio" and item.get("id_servicio") == id_item)
-            ]
+            session["carrito"] = [item for item in session["carrito"] if not (item.get("tipo")=="servicio" and item.get("id_servicio")==id_item)]
         session.modified = True
         flash("Item eliminado del carrito ❌", "info")
     return redirect(url_for("routes.carrito_ver"))
 
 
-@routes.route("/carrito/finalizar", methods=["GET", "POST"])
-def finalizar_compra():
-    if "usuario" not in session or session["usuario"]["rol"] not in ["cliente", "taller"]:
-        flash("Debes iniciar sesión como cliente o taller para comprar ❌", "danger")
+# --------------------------
+# FINALIZAR COMPRA OPTIMIZADO
+# --------------------------
+@routes.route("/carrito/finalizar", methods=["GET","POST"])
+def carrito_finalizar():
+    if "usuario" not in session or session["usuario"]["rol"] not in ["cliente","taller"]:
+        flash("Debes iniciar sesión para comprar ❌", "danger")
         return redirect(url_for("routes.login"))
 
-    # Validar que cliente tenga vehículo
+    id_usuario = session["usuario"]["numdocumento"]
+
+    # Verificar vehículo para clientes
     if session["usuario"]["rol"] == "cliente":
         conn = conectar_db()
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT COUNT(*) FROM vehiculos WHERE id_usucliente = %s",
-            (session["usuario"]["numdocumento"],)
-        )
+        cursor.execute("SELECT COUNT(*) FROM vehiculos WHERE id_usucliente=%s", (id_usuario,))
         tiene_vehiculo = cursor.fetchone()[0]
         conn.close()
-
         if tiene_vehiculo == 0:
-            flash("Debes registrar un vehículo antes de realizar compras 🚗❌", "danger")
+            flash("Debes registrar un vehículo antes de realizar compras 🚗❌","danger")
             return redirect(url_for("routes.agregar_vehiculo"))
 
     carrito = session.get("carrito", [])
     if not carrito:
-        flash("Tu carrito está vacío 🛒", "info")
+        flash("Tu carrito está vacío 🛒","info")
         return redirect(url_for("routes.catalogo"))
 
     conn = conectar_db()
     cursor = conn.cursor()
 
     try:
-        id_cliente = session["usuario"]["numdocumento"]
-
-        # 👉 solo soportamos UN producto por compra en este flujo
-        for item in carrito:
-            if item.get("tipo") == "producto":
-                cursor.execute("""
-                    INSERT INTO compra (taller_produc, producto_selec, cantidad, direccion_entrega, id_usucliente)
-                    VALUES (
-                        (SELECT u.nombre_usu FROM usuario u JOIN producto p ON u.numdocumento = p.id_usutaller WHERE p.id_producto=%s),
-                        %s, %s, %s, %s
-                    )
-                """, (
-                    item["id_producto"],
-                    item["id_producto"],
-                    item["cantidad"],
-                    "Sin dirección",  # puedes pedir dirección en el formulario
-                    id_cliente
-                ))
-
+        # Crear factura
+        cursor.execute("INSERT INTO factura (id_cliente, total) VALUES (%s, 0)", (id_usuario,))
         conn.commit()
-        flash("Compra registrada ✅. Esperando confirmación del taller.", "success")
+        factura_id = cursor.lastrowid
+
+        total_factura = 0
+
+        for item in carrito:
+            if item["tipo"] == "producto":
+                subtotal = item["precio"] * item["cantidad"]
+                total_factura += subtotal
+
+                cursor.execute("""
+                    INSERT INTO detalle_factura (id_factura, id_producto, cantidad, precio_unitario, subtotal)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (factura_id, item["id_producto"], item["cantidad"], item["precio"], subtotal))
+
+                cursor.execute("""
+                    UPDATE producto SET stock_producto = stock_producto - %s
+                    WHERE id_producto = %s
+                """, (item["cantidad"], item["id_producto"]))
+
+            elif item["tipo"] == "servicio":
+                subtotal = item["precio"]
+                total_factura += subtotal
+
+                cursor.execute("""
+                    INSERT INTO detalle_factura (id_factura, id_servicio, cantidad, precio_unitario, subtotal)
+                    VALUES (%s, %s, 1, %s, %s)
+                """, (factura_id, item["id_servicio"], item["precio"], subtotal))
+
+        cursor.execute("UPDATE factura SET total=%s WHERE id_factura=%s", (total_factura, factura_id))
+        conn.commit()
+
+        flash(f"Compra registrada ✅ Factura #{factura_id} generada", "success")
 
     except Exception as e:
         conn.rollback()
@@ -881,12 +877,9 @@ def finalizar_compra():
         cursor.close()
         conn.close()
 
-    # limpiar carrito
     session.pop("carrito", None)
     session.modified = True
-
     return redirect(url_for("routes.perfil_cliente"))
-
 
 # --------------------------
 # RUTAS PARA FACTURAS (USUARIO)
@@ -913,7 +906,6 @@ def mis_facturas():
 
 @routes.route("/factura/<int:id_factura>")
 def ver_factura(id_factura):
-    # Solo el cliente dueño de la factura (o admin) puede verla
     if "usuario" not in session:
         flash("Debes iniciar sesión para ver la factura", "warning")
         return redirect(url_for("routes.login"))
@@ -924,25 +916,36 @@ def ver_factura(id_factura):
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
 
-    # verificar que la factura pertenezca al usuario (o permitir admin)
-    cursor.execute("SELECT id_cliente FROM factura WHERE id_factura = %s", (id_factura,))
-    fila = cursor.fetchone()
-    if not fila:
+    # Verificar existencia y permisos
+    cursor.execute("SELECT id_cliente, fecha_emision FROM factura WHERE id_factura = %s", (id_factura,))
+    factura = cursor.fetchone()
+    if not factura:
         conn.close()
         flash("Factura no encontrada ❌", "danger")
         return redirect(url_for("routes.mis_facturas"))
 
-    if fila["id_cliente"] != id_usuario and not is_admin:
+    if factura["id_cliente"] != id_usuario and not is_admin:
         conn.close()
         flash("No tienes permiso para ver esta factura ❌", "danger")
         return redirect(url_for("routes.mis_facturas"))
 
-    # obtener detalles (productos y servicios)
+    # Obtener detalles de productos y servicios
     cursor.execute("""
         SELECT d.id_detalle,
-               d.id_producto, p.tipo_producto AS producto_nombre, p.marca_producto,
-               d.id_servicio, s.tipo_servicio AS servicio_nombre,
-               d.cantidad, d.precio_unitario, d.subtotal
+               CASE 
+                   WHEN d.id_producto IS NOT NULL THEN p.tipo_producto
+                   WHEN d.id_servicio IS NOT NULL THEN s.tipo_servicio
+                   ELSE 'Desconocido'
+               END AS nombre,
+               CASE 
+                   WHEN d.id_producto IS NOT NULL THEN 'Producto'
+                   WHEN d.id_servicio IS NOT NULL THEN 'Servicio'
+                   ELSE 'Desconocido'
+               END AS tipo,
+               p.marca_producto,
+               d.cantidad,
+               d.precio_unitario,
+               d.subtotal
         FROM detalle_factura d
         LEFT JOIN producto p ON d.id_producto = p.id_producto
         LEFT JOIN servicio s ON d.id_servicio = s.id_servicio
@@ -950,12 +953,63 @@ def ver_factura(id_factura):
     """, (id_factura,))
     detalles = cursor.fetchall()
 
-    # obtener encabezado
-    cursor.execute("SELECT id_factura, id_cliente, fecha_emision, total FROM factura WHERE id_factura = %s", (id_factura,))
-    factura = cursor.fetchone()
+    # Calcular total dinámicamente
+    total = sum(item["subtotal"] for item in detalles)
+    factura["total"] = total
 
     conn.close()
     return render_template("ver_factura.html", factura=factura, detalles=detalles)
+
+# --------------------------
+# AGREGAR SERVICIO A FACTURA
+# --------------------------
+@routes.route("/factura/agregar_servicio/<int:id_servicio>", methods=["POST"])
+def agregar_servicio_factura(id_servicio):
+    if "usuario" not in session:
+        flash("Debes iniciar sesión para contratar un servicio", "warning")
+        return redirect(url_for("routes.login"))
+
+    id_usuario = session["usuario"]["numdocumento"]
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+
+    # Obtener la última factura del usuario o crear una nueva
+    cursor.execute("""
+        SELECT id_factura FROM factura
+        WHERE id_cliente = %s
+        ORDER BY fecha_emision DESC
+        LIMIT 1
+    """, (id_usuario,))
+    factura = cursor.fetchone()
+
+    if not factura:
+        cursor.execute("INSERT INTO factura (id_cliente, total) VALUES (%s, 0)", (id_usuario,))
+        conn.commit()
+        factura_id = cursor.lastrowid
+    else:
+        factura_id = factura["id_factura"]
+
+    # Obtener precio del servicio
+    cursor.execute("SELECT precio FROM servicio WHERE id_servicio = %s", (id_servicio,))
+    serv = cursor.fetchone()
+    if not serv:
+        conn.close()
+        flash("El servicio no existe ❌", "danger")
+        return redirect(url_for("routes.mis_facturas"))
+
+    precio = serv["precio"]
+
+    # Insertar servicio en detalle_factura
+    cursor.execute("""
+        INSERT INTO detalle_factura (id_factura, id_servicio, cantidad, precio_unitario, subtotal)
+        VALUES (%s, %s, 1, %s, %s)
+    """, (factura_id, id_servicio, precio, precio))
+    conn.commit()
+    conn.close()
+
+    flash("✅ Servicio agregado a la factura correctamente", "success")
+    return redirect(url_for("routes.ver_factura", id_factura=factura_id))
+
 
 # --------------------------
 # PETICIONES DE COMPRA (TALLER)

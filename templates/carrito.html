@@ -42,13 +42,16 @@
     <!-- Total -->
     <div class="text-end mt-3">
         <h4>Total: ${{ "%.2f"|format(total) }}</h4>
-        <a href="{{ url_for('routes.finalizar_compra') }}" class="btn btn-success btn-lg">✅ Finalizar Compra</a>
+        <!-- Cambiado el endpoint a carrito_finalizar -->
+        <a href="{{ url_for('routes.carrito_finalizar') }}" class="btn btn-success btn-lg">✅ Finalizar Compra</a>
     </div>
 
     {% else %}
         <p class="text-center text-muted">Tu carrito está vacío 🛒</p>
     {% endif %}
+
     <div class="mt-4">
         <a href="{{ url_for('routes.catalogo') }}" class="btn btn-secondary">⬅ Seguir Comprando</a>
+    </div>
 </div>
 {% endblock %}
