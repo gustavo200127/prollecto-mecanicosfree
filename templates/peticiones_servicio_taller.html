@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+    <h2>📋 Peticiones de Servicio</h2>
+    <p>Desde aquí puedes aprobar o rechazar los servicios solicitados por tus clientes.</p>
+
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>ID Detalle</th>
+                <th>ID Factura</th>
+                <th>Cliente</th>
+                <th>Servicio</th>
+                <th>Precio</th>
+                <th>Subtotal</th>
+                <th>Estado</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in peticiones %}
+            <tr>
+                <td>{{ p.id_detalle }}</td>
+                <td>{{ p.id_factura }}</td>
+                <td>{{ p.cliente }}</td>
+                <td>{{ p.servicio }}</td>
+                <td>{{ p.precio_unitario }}</td>
+                <td>{{ p.subtotal }}</td>
+                <td>{{ p.estado_taller or 'pendiente' }}</td>
+                <td>
+                    {% if not p.estado_taller %}
+                    <form method="POST" action="{{ url_for('routes.actualizar_peticion_servicio', id_detalle=p.id_detalle) }}">
+                        <button name="estado" value="aprobada" class="btn btn-success btn-sm">Aprobar</button>
+                        <button name="estado" value="rechazada" class="btn btn-danger btn-sm">Rechazar</button>
+                    </form>
+                    {% else %}
+                        <span class="badge 
+                            {% if p.estado_taller == 'aprobada' %} bg-success
+                            {% elif p.estado_taller == 'rechazada' %} bg-danger
+                            {% else %} bg-secondary
+                            {% endif %}
+                        ">{{ p.estado_taller }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <a href="{{ url_for('routes.perfil_taller') }}" class="btn btn-primary mt-3">Volver al Perfil</a>
+</div>
+{% endblock %}

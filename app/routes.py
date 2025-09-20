@@ -929,7 +929,7 @@ def ver_factura(id_factura):
         flash("No tienes permiso para ver esta factura ❌", "danger")
         return redirect(url_for("routes.mis_facturas"))
 
-    # Obtener detalles de productos y servicios
+    # Obtener detalles de productos y servicios con estado del taller
     cursor.execute("""
         SELECT d.id_detalle,
                CASE 
@@ -945,7 +945,8 @@ def ver_factura(id_factura):
                p.marca_producto,
                d.cantidad,
                d.precio_unitario,
-               d.subtotal
+               d.subtotal,
+               COALESCE(d.estado_taller, 'pendiente') AS estado_taller
         FROM detalle_factura d
         LEFT JOIN producto p ON d.id_producto = p.id_producto
         LEFT JOIN servicio s ON d.id_servicio = s.id_servicio
@@ -959,6 +960,7 @@ def ver_factura(id_factura):
 
     conn.close()
     return render_template("ver_factura.html", factura=factura, detalles=detalles)
+
 
 # --------------------------
 # AGREGAR SERVICIO A FACTURA
@@ -999,10 +1001,10 @@ def agregar_servicio_factura(id_servicio):
 
     precio = serv["precio"]
 
-    # Insertar servicio en detalle_factura
+    # Insertar servicio en detalle_factura con estado pendiente
     cursor.execute("""
-        INSERT INTO detalle_factura (id_factura, id_servicio, cantidad, precio_unitario, subtotal)
-        VALUES (%s, %s, 1, %s, %s)
+        INSERT INTO detalle_factura (id_factura, id_servicio, cantidad, precio_unitario, subtotal, estado_taller)
+        VALUES (%s, %s, 1, %s, %s, 'pendiente')
     """, (factura_id, id_servicio, precio, precio))
     conn.commit()
     conn.close()
@@ -1012,49 +1014,66 @@ def agregar_servicio_factura(id_servicio):
 
 
 # --------------------------
-# PETICIONES DE COMPRA (TALLER)
+# PETICIONES DE SERVICIO (TALLER)
 # --------------------------
-@routes.route("/taller/peticiones")
-def ver_peticiones_taller():
+@routes.route("/taller/peticiones_servicio")
+def ver_peticiones_servicio():
     if "usuario" not in session or session["usuario"]["rol"] != "taller":
         flash("Acceso no autorizado ❌", "danger")
         return redirect(url_for("routes.login"))
 
     id_taller = session["usuario"]["numdocumento"]
-
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
+
+    # Consultar todos los servicios pendientes asociados a este taller
     cursor.execute("""
-        SELECT pc.id_peticion, c.id_compra, u.nombre_usu AS cliente, p.tipo_producto, c.cantidad, pc.estado, pc.fecha
-        FROM peticion_compra pc
-        JOIN compra c ON pc.id_compra = c.id_compra
-        JOIN usuario u ON c.id_usucliente = u.numdocumento
-        JOIN producto p ON c.producto_selec = p.id_producto
-        WHERE pc.id_taller = %s
-        ORDER BY pc.fecha DESC
+        SELECT d.id_detalle,
+               f.id_factura,
+               u.nombre_usu AS cliente,
+               s.tipo_servicio AS servicio,
+               d.precio_unitario,
+               d.subtotal,
+               d.estado_taller
+        FROM detalle_factura d
+        JOIN factura f ON d.id_factura = f.id_factura
+        JOIN usuario u ON f.id_cliente = u.numdocumento
+        JOIN servicio s ON d.id_servicio = s.id_servicio
+        WHERE s.id_usutaller = %s
+        ORDER BY f.fecha_emision DESC
     """, (id_taller,))
+    
     peticiones = cursor.fetchall()
     conn.close()
+    return render_template("peticiones_servicio_taller.html", peticiones=peticiones)
 
-    return render_template("peticiones_taller.html", peticiones=peticiones)
 
-
-@routes.route("/peticiones/<int:id_peticion>/confirmar", methods=["POST"])
-def confirmar_peticion(id_peticion):
+# --------------------------
+# ACEPTAR O RECHAZAR PETICIÓN
+# --------------------------
+@routes.route("/taller/peticiones_servicio/<int:id_detalle>/actualizar", methods=["POST"])
+def actualizar_peticion_servicio(id_detalle):
     if "usuario" not in session or session["usuario"]["rol"] != "taller":
         flash("Acceso no autorizado ❌", "danger")
         return redirect(url_for("routes.login"))
 
-    estado = request.form.get("estado")  # aprobada o rechazada
+    estado = request.form.get("estado")  # 'aprobada' o 'rechazada'
     if estado not in ["aprobada", "rechazada"]:
         flash("Estado inválido ❌", "danger")
-        return redirect(url_for("routes.ver_peticiones_taller"))
+        return redirect(url_for("routes.ver_peticiones_servicio"))
 
     conn = conectar_db()
     cursor = conn.cursor()
-    cursor.execute("UPDATE peticion_compra SET estado = %s WHERE id_peticion = %s", (estado, id_peticion))
+
+    # Actualizar estado en detalle_factura
+    cursor.execute("""
+        UPDATE detalle_factura
+        SET estado_taller = %s
+        WHERE id_detalle = %s
+    """, (estado, id_detalle))
+
     conn.commit()
     conn.close()
 
     flash(f"Petición {estado} con éxito ✅", "success")
-    return redirect(url_for("routes.ver_peticiones_taller"))
+    return redirect(url_for("routes.ver_peticiones_servicio"))

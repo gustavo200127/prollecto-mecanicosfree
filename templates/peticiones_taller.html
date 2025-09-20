@@ -1,23 +1,34 @@
 <h2>📋 Peticiones de compra</h2>
-<table class="table">
-  <tr>
-    <th>ID</th><th>Cliente</th><th>Producto</th><th>Cantidad</th><th>Estado</th><th>Acciones</th>
-  </tr>
+<table class="table table-bordered">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Cliente</th>
+      <th>Producto / Servicio</th>
+      <th>Cantidad</th>
+      <th>Estado</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
   {% for p in peticiones %}
-  <tr>
-    <td>{{ p.id_peticion }}</td>
-    <td>{{ p.cliente }}</td>
-    <td>{{ p.tipo_producto }}</td>
-    <td>{{ p.cantidad }}</td>
-    <td>{{ p.estado }}</td>
-    <td>
-      {% if p.estado == 'pendiente' %}
-      <form method="POST" action="{{ url_for('routes.confirmar_peticion', id_peticion=p.id_peticion) }}">
-        <button name="estado" value="aprobada" class="btn btn-success btn-sm">Aprobar</button>
-        <button name="estado" value="rechazada" class="btn btn-danger btn-sm">Rechazar</button>
-      </form>
-      {% endif %}
-    </td>
-  </tr>
+    <tr>
+      <td>{{ p.id_peticion }}</td>
+      <td>{{ p.cliente }}</td>
+      <td>{{ p.nombre_producto or p.nombre_servicio or 'Desconocido' }}</td>
+      <td>{{ p.cantidad }}</td>
+      <td>{{ p.estado }}</td>
+      <td>
+        {% if p.estado == 'pendiente' %}
+        <form method="POST" action="{{ url_for('routes.confirmar_peticion', id_peticion=p.id_peticion) }}" style="display:inline">
+          <button name="estado" value="aprobada" class="btn btn-success btn-sm">Aprobar</button>
+        </form>
+        <form method="POST" action="{{ url_for('routes.confirmar_peticion', id_peticion=p.id_peticion) }}" style="display:inline">
+          <button name="estado" value="rechazada" class="btn btn-danger btn-sm">Rechazar</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
   {% endfor %}
+  </tbody>
 </table>
