@@ -1,13 +1,76 @@
 {% extends "layout.html" %}
 {% block content %}
-<div class="container mt-4">
-  <h2>Bienvenido Taller, {{ usuario.nombre_usu }}</h2>
-  <p>Desde aquí puedes gestionar tus servicios, productos y solicitudes de clientes.</p>
+<div class="container mt-5">
+    <div class="card shadow-lg">
+        <div class="card-header bg-primary text-white">
+            <h3>🏭 Perfil del Taller</h3>
+        </div>
+        <div class="card-body">
+            <!-- Datos del taller -->
+            <h4 class="mb-3">Información</h4>
+            <ul class="list-group mb-4">
+                <li class="list-group-item"><strong>Nombre:</strong> {{ usuario["nombre_usu"] }}</li>
+                <li class="list-group-item"><strong>Documento:</strong> {{ usuario["numdocumento"] }}</li>
+                <li class="list-group-item"><strong>Correo:</strong> {{ usuario["correoElectronico"] }}</li>
+            </ul>
 
-  <!-- Botones de gestión -->
-  <a href="{{ url_for('routes.agregar_servicio') }}" class="btn btn-primary">Agregar Servicio</a>
-  <a href="{{ url_for('routes.agregar_producto') }}" class="btn btn-info">Agregar Producto</a>
-  <a href="{{ url_for('routes.ver_peticiones_servicio') }}" class="btn btn-warning">Ver Solicitudes de Servicios</a>
-  <a href="{{ url_for('routes.logout') }}" class="btn btn-danger">Cerrar Sesión</a>
+            <!-- Botones de acciones -->
+            <h4 class="mb-3">Acciones rápidas</h4>
+            <div class="d-flex flex-wrap gap-2 mb-4">
+                <a href="{{ url_for('routes.agregar_servicio') }}" class="btn btn-primary">➕ Agregar Servicio</a>
+                <a href="{{ url_for('routes.agregar_producto') }}" class="btn btn-info">🛠 Agregar Producto</a>
+                <a href="{{ url_for('routes.ver_peticiones_servicio') }}" class="btn btn-warning">📋 Ver Solicitudes</a>
+                <a href="{{ url_for('routes.solicitud_proveedor') }}" class="btn btn-success">🏭 Registrar Proveedor</a>
+            </div>
+
+            <!-- Estado de solicitudes de proveedores -->
+            <h4 class="mb-3">Solicitudes de Proveedor</h4>
+            {% if solicitudes and solicitudes|length > 0 %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-bordered">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>ID Solicitud</th>
+                                <th>Nombre Proveedor</th>
+                                <th>Teléfono</th>
+                                <th>Correo</th>
+                                <th>Dirección</th>
+                                <th>Estado</th>
+                                <th>Fecha</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in solicitudes %}
+                            <tr>
+                                <td>{{ s["id_solicitud"] }}</td>
+                                <td>{{ s["nombre_proveedor"] }}</td>
+                                <td>{{ s["telefono"] }}</td>
+                                <td>{{ s["correo"] }}</td>
+                                <td>{{ s["direccion"] }}</td>
+                                <td>
+                                    {% if s["estado"] == 'pendiente' %}
+                                        <span class="badge bg-warning text-dark">Pendiente</span>
+                                    {% elif s["estado"] == 'aprobado' %}
+                                        <span class="badge bg-success">Aprobado</span>
+                                    {% elif s["estado"] == 'rechazado' %}
+                                        <span class="badge bg-danger">Rechazado</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ s["fecha"] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-info">No has registrado solicitudes de proveedor todavía.</div>
+            {% endif %}
+
+            <!-- Botón cerrar sesión -->
+            <div class="mt-4">
+                <a href="{{ url_for('routes.logout') }}" class="btn btn-danger">🚪 Cerrar Sesión</a>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

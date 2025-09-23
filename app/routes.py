@@ -69,12 +69,10 @@ def login():
         conn.close()
 
         if usuario:
-            # Verificar si el usuario está activo
             if not usuario["activo"]:
                 flash("Tu cuenta ha sido deshabilitada ❌", "danger")
                 return redirect(url_for("routes.login"))
 
-            # Guardar sesión
             session["usuario"] = {
                 "numdocumento": usuario["numdocumento"],
                 "nombre_usu": usuario["nombre_usu"],
@@ -83,9 +81,10 @@ def login():
             }
             flash("Inicio de sesión exitoso ✅", "success")
 
-            # Redirigir según rol
             if usuario["tipoRol"] == "taller":
                 return redirect(url_for("routes.perfil_taller"))
+            elif usuario["tipoRol"] == "admin":
+                return redirect(url_for("routes.admin_dashboard"))
             else:
                 return redirect(url_for("routes.perfil_cliente"))
         else:
@@ -119,49 +118,8 @@ def perfil_taller():
 @routes.route("/logout")
 def logout():
     session.pop("usuario", None)
-    flash("Sesión de usuario cerrada ✅", "info")
+    flash("Sesión cerrada ✅", "info")
     return redirect(url_for("routes.login"))
-
-# --------------------------
-# LISTA DE USUARIOS (ADMIN)
-# --------------------------
-@routes.route("/usuarios")
-def usuarios():
-    if "admin" not in session:
-        flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
-
-    page = request.args.get("page", 1, type=int)
-    per_page = 5
-    offset = (page - 1) * per_page
-
-    conn = conectar_db()
-    cursor = conn.cursor(dictionary=True)
-
-    # Contar total de usuarios
-    cursor.execute("SELECT COUNT(*) as total FROM usuario")
-    total = cursor.fetchone()["total"]
-
-    # Traer usuarios con rol y estado (activo)
-    cursor.execute("""
-        SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, 
-               r.tipoRol, u.activo
-        FROM usuario u
-        LEFT JOIN rol r ON u.numdocumento = r.numdocumento
-        LIMIT %s OFFSET %s
-    """, (per_page, offset))
-    usuarios = cursor.fetchall()
-    conn.close()
-
-    total_pages = (total + per_page - 1) // per_page
-
-    return render_template(
-        "usuarios.html",
-        usuarios=usuarios,
-        page=page,
-        total_pages=total_pages
-    )
-
 
 # --------------------------
 # REGISTRAR USUARIO (PÚBLICO)
@@ -197,7 +155,7 @@ def registrar_usuario():
 
         rol = request.form.get("rol", "cliente")
         if rol == "taller":
-            rol = "pendiente_taller"   # 👈 ahora queda en revisión
+            rol = "pendiente_taller"
         else:
             rol = "cliente"
 
@@ -234,40 +192,40 @@ def login_admin():
         conn.close()
 
         if admin:
-            session["admin"] = {
+            session["usuario"] = {
                 "numdocumento": admin["numdocumento"],
                 "nombre_usu": admin["nombre_usu"],
-                "correoElectronico": admin["correoElectronico"]
+                "correoElectronico": admin["correoElectronico"],
+                "rol": "admin"
             }
             flash("Inicio de sesión como administrador ✅", "success")
             return redirect(url_for("routes.admin_dashboard"))
         else:
-            flash("Credenciales inválidas o no eres administrador ❌", "danger")
+            flash("Credenciales inválidas ❌", "danger")
 
     return render_template("admin_login.html")
 
+# --------------------------
+# DASHBOARD ADMIN
+# --------------------------
 @routes.route("/admin/dashboard")
 def admin_dashboard():
-    if "admin" not in session:
-        flash("Debes iniciar sesión como administrador", "warning")
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
+        flash("Acceso no autorizado ❌", "danger")
         return redirect(url_for("routes.login_admin"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
 
-    # Total de usuarios
     cursor.execute("SELECT COUNT(*) AS total FROM usuario")
     total_usuarios = cursor.fetchone()["total"]
 
-    # Total de talleres (rol = 'taller')
     cursor.execute("SELECT COUNT(*) AS total FROM rol WHERE tipoRol = 'taller'")
     total_talleres = cursor.fetchone()["total"]
 
-    # Total de productos
     cursor.execute("SELECT COUNT(*) AS total FROM producto")
     total_productos = cursor.fetchone()["total"]
 
-    # Total de servicios
     cursor.execute("SELECT COUNT(*) AS total FROM servicio")
     total_servicios = cursor.fetchone()["total"]
 
@@ -286,9 +244,21 @@ def admin_dashboard():
 # --------------------------
 @routes.route("/admin/logout")
 def admin_logout():
-    session.pop("admin", None)
+    session.pop("usuario", None)
     flash("Sesión de administrador cerrada ✅", "info")
     return redirect(url_for("routes.login_admin"))
+
+# --------------------------
+# EJEMPLO: USUARIOS (ADMIN)
+# --------------------------
+@routes.route("/usuarios")
+def usuarios():
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login_admin"))
+
+    # resto de la lógica...
+
 
 # --------------------------
 # EDITAR USUARIO (ADMIN)
@@ -1077,3 +1047,143 @@ def actualizar_peticion_servicio(id_detalle):
 
     flash(f"Petición {estado} con éxito ✅", "success")
     return redirect(url_for("routes.ver_peticiones_servicio"))
+
+# --------------------------
+# SOLICITUD DE PROVEEDOR (TALLER)
+# --------------------------
+@routes.route("/taller/solicitud_proveedor", methods=["GET", "POST"])
+def solicitud_proveedor():
+    if "usuario" not in session or session["usuario"]["rol"] != "taller":
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    if request.method == "POST":
+        id_taller = session["usuario"]["numdocumento"]
+        nombre = request.form["nombre"]
+        telefono = request.form["telefono"]
+        correo = request.form["correo"]
+        direccion = request.form["direccion"]
+
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO solicitud_proveedor (id_taller, nombre_proveedor, telefono, correo, direccion)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (id_taller, nombre, telefono, correo, direccion))
+        conn.commit()
+        conn.close()
+
+        flash("Solicitud de proveedor enviada ✅", "success")
+        return redirect(url_for("routes.perfil_taller"))  # 👈 aquí el cambio
+
+    return render_template("taller/solicitud_proveedor.html")
+
+
+@routes.route("/admin/solicitudes_proveedor")
+def admin_solicitudes_proveedor():
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login_admin"))
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT sp.*, u.nombre_usu AS nombre_taller, u.correoElectronico AS correo_taller
+        FROM solicitud_proveedor sp
+        JOIN usuario u ON sp.id_taller = u.numdocumento
+        WHERE sp.estado = 'pendiente'
+    """)
+    solicitudes = cursor.fetchall()
+    conn.close()
+
+    return render_template("admin_solicitudes_proveedor.html", solicitudes=solicitudes)
+
+@routes.route("/admin/solicitud_proveedor/<int:id_solicitud>/<string:accion>")
+def admin_resolver_solicitud_proveedor(id_solicitud, accion):
+    # Validar acceso de administrador
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login_admin"))
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    if accion == "aprobar":
+        cursor.execute("""
+            UPDATE solicitud_proveedor 
+            SET estado = 'aprobado'
+            WHERE id_solicitud = %s
+        """, (id_solicitud,))
+        flash("Proveedor aprobado ✅", "success")
+
+    elif accion == "rechazar":
+        cursor.execute("""
+            UPDATE solicitud_proveedor 
+            SET estado = 'rechazado'
+            WHERE id_solicitud = %s
+        """, (id_solicitud,))
+        flash("Solicitud rechazada ❌", "warning")
+
+    else:
+        flash("Acción inválida ❌", "danger")
+
+    conn.commit()
+    conn.close()
+
+    return redirect(url_for("routes.admin_solicitudes_proveedor"))
+
+# --------------------------
+# PROVEEDOR - VER PEDIDOS
+# --------------------------
+@routes.route("/proveedor/pedidos")
+def proveedor_pedidos():
+    if "usuario" not in session or session["usuario"]["rol"] != "proveedor":
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    id_proveedor = session["usuario"]["numdocumento"]
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT pp.id_pedido, pp.cantidad, pp.fecha, pp.estado,
+               pr.tipo_producto, pr.marca_producto
+        FROM pedido_proveedor pp
+        JOIN producto pr ON pp.id_producto = pr.id_producto
+        WHERE pp.id_proveedor = %s
+        ORDER BY pp.fecha DESC
+    """, (id_proveedor,))
+    pedidos = cursor.fetchall()
+    conn.close()
+
+    return render_template("proveedor_pedidos.html", pedidos=pedidos)
+
+
+# --------------------------
+# PROVEEDOR - ACTUALIZAR ESTADO DEL PEDIDO
+# --------------------------
+@routes.route("/proveedor/pedido/<int:id_pedido>/<string:estado>")
+def proveedor_actualizar_pedido(id_pedido, estado):
+    if "usuario" not in session or session["usuario"]["rol"] != "proveedor":
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    id_proveedor = session["usuario"]["numdocumento"]
+
+    if estado not in ["enviado", "recibido"]:
+        flash("Estado inválido ❌", "danger")
+        return redirect(url_for("routes.proveedor_pedidos"))
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE pedido_proveedor
+        SET estado = %s
+        WHERE id_pedido = %s AND id_proveedor = %s
+    """, (estado, id_pedido, id_proveedor))
+    conn.commit()
+    conn.close()
+
+    flash(f"Pedido #{id_pedido} actualizado a {estado} ✅", "success")
+    return redirect(url_for("routes.proveedor_pedidos"))

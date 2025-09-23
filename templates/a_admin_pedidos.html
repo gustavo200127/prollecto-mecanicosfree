@@ -1,0 +1,56 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-5">
+    <h2 class="mb-4">📦 Pedidos de Proveedores</h2>
+
+    {% if pedidos %}
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID Pedido</th>
+                        <th>Producto</th>
+                        <th>Cantidad</th>
+                        <th>Proveedor</th>
+                        <th>Taller</th>
+                        <th>Fecha</th>
+                        <th>Estado</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in pedidos %}
+                    <tr>
+                        <td>{{ p.id_pedido }}</td>
+                        <td>{{ p.tipo_producto }} - {{ p.marca_producto }}</td>
+                        <td>{{ p.cantidad }}</td>
+                        <td>{{ p.nombre_proveedor }}</td>
+                        <td>{{ p.nombre_taller }}</td>
+                        <td>{{ p.fecha }}</td>
+                        <td>
+                            {% if p.estado == "pendiente" %}
+                                <span class="badge bg-warning text-dark">Pendiente</span>
+                            {% elif p.estado == "enviado" %}
+                                <span class="badge bg-primary">Enviado</span>
+                            {% elif p.estado == "recibido" %}
+                                <span class="badge bg-success">Recibido</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if p.estado == "pendiente" %}
+                                <a href="{{ url_for('routes.admin_actualizar_pedido', id_pedido=p.id_pedido, estado='aprobado') }}" class="btn btn-sm btn-success">✅ Aprobar</a>
+                                <a href="{{ url_for('routes.admin_actualizar_pedido', id_pedido=p.id_pedido, estado='rechazado') }}" class="btn btn-sm btn-danger">❌ Rechazar</a>
+                            {% else %}
+                                <span class="text-muted">Sin acciones</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="alert alert-info">📭 No hay pedidos registrados en este momento.</div>
+    {% endif %}
+</div>
+{% endblock %}

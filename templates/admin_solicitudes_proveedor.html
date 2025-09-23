@@ -1,0 +1,43 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-5">
+    <h2 class="mb-4">📋 Solicitudes de Proveedor Pendientes</h2>
+    {% if solicitudes %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Taller</th>
+                        <th>Proveedor</th>
+                        <th>Teléfono</th>
+                        <th>Correo</th>
+                        <th>Dirección</th>
+                        <th>Fecha</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in solicitudes %}
+                    <tr>
+                        <td>{{ s.id_solicitud }}</td>
+                        <td>{{ s.nombre_taller }}</td> <!-- ✅ ahora muestra el nombre -->
+                        <td>{{ s.nombre_proveedor }}</td>
+                        <td>{{ s.telefono }}</td>
+                        <td>{{ s.correo }}</td>
+                        <td>{{ s.direccion }}</td>
+                        <td>{{ s.fecha }}</td>
+                        <td>
+                            <a href="{{ url_for('routes.admin_resolver_solicitud_proveedor', id_solicitud=s.id_solicitud, accion='aprobar') }}" class="btn btn-success btn-sm">✔ Aprobar</a>
+                            <a href="{{ url_for('routes.admin_resolver_solicitud_proveedor', id_solicitud=s.id_solicitud, accion='rechazar') }}" class="btn btn-danger btn-sm">✘ Rechazar</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="alert alert-info">No hay solicitudes pendientes.</div>
+    {% endif %}
+</div>
+{% endblock %}

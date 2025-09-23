@@ -49,10 +49,12 @@
         <a href="{{ url_for('routes.solicitudes_taller') }}" class="btn btn-dark me-2">📋 Solicitudes de Taller</a>
         <a href="{{ url_for('routes.admin_publicaciones') }}" class="btn btn-secondary me-2">📑 Ver Publicaciones</a>
         <a href="{{ url_for('routes.admin_productos') }}" class="btn btn-primary me-2">📦 Revisar Productos</a>
-        <a href="{{ url_for('routes.admin_servicios') }}" class="btn btn-warning">🛠️ Revisar Servicios</a>
+        <a href="{{ url_for('routes.admin_servicios') }}" class="btn btn-warning me-2">🛠️ Revisar Servicios</a>
+        <a href="{{ url_for('routes.admin_solicitudes_proveedor') }}" class="btn btn-success">🏭 Solicitudes de Proveedores</a>
+
     </div>
 
     <hr>
-    <p class="text-muted">Bienvenido al panel de administración. Desde aquí puedes gestionar usuarios, revisar solicitudes de talleres, publicaciones, productos y servicios.</p>
+    <p class="text-muted">Bienvenido al panel de administración. Desde aquí puedes gestionar usuarios, revisar solicitudes de talleres, publicaciones, productos, servicios y proveedores.</p>
 </div>
 {% endblock %}
