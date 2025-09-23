@@ -4,7 +4,8 @@
 <div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>📋 Panel de Administración</h2>
-        <a href="{{ url_for('routes.admin_logout') }}" class="btn btn-danger">Cerrar Sesión</a>
+        <!-- Logout unificado -->
+        <a href="{{ url_for('routes.logout') }}" class="btn btn-danger">Cerrar Sesión</a>
     </div>
 
     <!-- Estadísticas rápidas -->
@@ -51,7 +52,6 @@
         <a href="{{ url_for('routes.admin_productos') }}" class="btn btn-primary me-2">📦 Revisar Productos</a>
         <a href="{{ url_for('routes.admin_servicios') }}" class="btn btn-warning me-2">🛠️ Revisar Servicios</a>
         <a href="{{ url_for('routes.admin_solicitudes_proveedor') }}" class="btn btn-success">🏭 Solicitudes de Proveedores</a>
-
     </div>
 
     <hr>

@@ -1,16 +1,20 @@
+import os
 from flask import Flask
 
 def create_app():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    templates_path = os.path.join(base_dir, "../templates")
+    static_path = os.path.join(base_dir, "../static")
+
     app = Flask(
         __name__,
-        template_folder="../templates",  # busca en la carpeta raíz/templates
-        static_folder="../static"       # opcional, para CSS/JS/imagenes
+        template_folder=templates_path,
+        static_folder=static_path
     )
 
-    app.secret_key = "clave_secreta"  # en producción usa config/.env
+    app.secret_key = "clave_secreta"
 
-    # Importar las rutas
     from . import routes
-    routes.init_app(app)
+    routes.init_app(app)  # Inicializa las rutas/blueprints
 
     return app

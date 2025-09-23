@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 import mysql.connector
+from functools import wraps
 
 routes = Blueprint("routes", __name__)
 
@@ -13,6 +14,23 @@ def conectar_db():
         password="",
         database="mecanicosfree"
     )
+
+# --------------------------
+# DECORADOR PARA RUTAS PROTEGIDAS POR ROL
+# --------------------------
+def login_required(rol=None):
+    def wrapper(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if "usuario" not in session:
+                flash("Debes iniciar sesión ❌", "danger")
+                return redirect(url_for("routes.login"))
+            if rol and session["usuario"]["rol"] != rol:
+                flash("Acceso no autorizado ❌", "danger")
+                return redirect(url_for("routes.login"))
+            return f(*args, **kwargs)
+        return decorated
+    return wrapper
 
 # --------------------------
 # INICIO
@@ -49,7 +67,7 @@ def catalogo():
     return render_template("catalogo.html", productos=productos, servicios=servicios)
 
 # --------------------------
-# LOGIN USUARIO (cliente / taller)
+# LOGIN UNIFICADO (cliente / taller / admin)
 # --------------------------
 @routes.route("/login", methods=["GET", "POST"])
 def login():
@@ -81,10 +99,12 @@ def login():
             }
             flash("Inicio de sesión exitoso ✅", "success")
 
-            if usuario["tipoRol"] == "taller":
-                return redirect(url_for("routes.perfil_taller"))
-            elif usuario["tipoRol"] == "admin":
+            # Redirección según rol
+            rol = usuario["tipoRol"]
+            if rol == "admin":
                 return redirect(url_for("routes.admin_dashboard"))
+            elif rol == "taller":
+                return redirect(url_for("routes.perfil_taller"))
             else:
                 return redirect(url_for("routes.perfil_cliente"))
         else:
@@ -96,33 +116,51 @@ def login():
 # PERFIL CLIENTE
 # --------------------------
 @routes.route("/perfil_cliente")
+@login_required(rol="cliente")
 def perfil_cliente():
-    if "usuario" not in session or session["usuario"]["rol"] != "cliente":
-        flash("Acceso no autorizado ❌", "danger")
-        return redirect(url_for("routes.login"))
     return render_template("perfil_cliente.html", usuario=session["usuario"])
 
 # --------------------------
 # PERFIL TALLER
 # --------------------------
 @routes.route("/perfil_taller")
+@login_required(rol="taller")
 def perfil_taller():
-    if "usuario" not in session or session["usuario"]["rol"] != "taller":
-        flash("Acceso no autorizado ❌", "danger")
-        return redirect(url_for("routes.login"))
     return render_template("perfil_taller.html", usuario=session["usuario"])
 
 # --------------------------
-# LOGOUT USUARIO
+# DASHBOARD ADMIN
 # --------------------------
-@routes.route("/logout")
-def logout():
-    session.pop("usuario", None)
-    flash("Sesión cerrada ✅", "info")
-    return redirect(url_for("routes.login"))
+@routes.route("/admin/dashboard")
+@login_required(rol="admin")
+def admin_dashboard():
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("SELECT COUNT(*) AS total FROM usuario")
+    total_usuarios = cursor.fetchone()["total"]
+
+    cursor.execute("SELECT COUNT(*) AS total FROM rol WHERE tipoRol = 'taller'")
+    total_talleres = cursor.fetchone()["total"]
+
+    cursor.execute("SELECT COUNT(*) AS total FROM producto")
+    total_productos = cursor.fetchone()["total"]
+
+    cursor.execute("SELECT COUNT(*) AS total FROM servicio")
+    total_servicios = cursor.fetchone()["total"]
+
+    conn.close()
+
+    return render_template(
+        "admin_dashboard.html",
+        total_usuarios=total_usuarios,
+        total_talleres=total_talleres,
+        total_productos=total_productos,
+        total_servicios=total_servicios
+    )
 
 # --------------------------
-# REGISTRAR USUARIO (PÚBLICO)
+# REGISTRAR USUARIO
 # --------------------------
 @routes.route("/usuarios/registrar", methods=["GET", "POST"])
 def registrar_usuario():
@@ -172,102 +210,31 @@ def registrar_usuario():
     return render_template("registrar_usuario.html")
 
 # --------------------------
-# LOGIN ADMIN
+# LOGOUT UNIFICADO
 # --------------------------
-@routes.route("/admin/login", methods=["GET", "POST"])
-def login_admin():
-    if request.method == "POST":
-        correo = request.form.get("correoElectronico")
-        contrasena = request.form.get("contrasena")
-
-        conn = conectar_db()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("""
-            SELECT u.numdocumento, u.nombre_usu, u.correoElectronico
-            FROM usuario u
-            JOIN rol r ON u.numdocumento = r.numdocumento
-            WHERE u.correoElectronico=%s AND u.contrasena=%s AND r.tipoRol='admin'
-        """, (correo, contrasena))
-        admin = cursor.fetchone()
-        conn.close()
-
-        if admin:
-            session["usuario"] = {
-                "numdocumento": admin["numdocumento"],
-                "nombre_usu": admin["nombre_usu"],
-                "correoElectronico": admin["correoElectronico"],
-                "rol": "admin"
-            }
-            flash("Inicio de sesión como administrador ✅", "success")
-            return redirect(url_for("routes.admin_dashboard"))
-        else:
-            flash("Credenciales inválidas ❌", "danger")
-
-    return render_template("admin_login.html")
-
-# --------------------------
-# DASHBOARD ADMIN
-# --------------------------
-@routes.route("/admin/dashboard")
-def admin_dashboard():
-    if "usuario" not in session or session["usuario"]["rol"] != "admin":
-        flash("Acceso no autorizado ❌", "danger")
-        return redirect(url_for("routes.login_admin"))
-
-    conn = conectar_db()
-    cursor = conn.cursor(dictionary=True)
-
-    cursor.execute("SELECT COUNT(*) AS total FROM usuario")
-    total_usuarios = cursor.fetchone()["total"]
-
-    cursor.execute("SELECT COUNT(*) AS total FROM rol WHERE tipoRol = 'taller'")
-    total_talleres = cursor.fetchone()["total"]
-
-    cursor.execute("SELECT COUNT(*) AS total FROM producto")
-    total_productos = cursor.fetchone()["total"]
-
-    cursor.execute("SELECT COUNT(*) AS total FROM servicio")
-    total_servicios = cursor.fetchone()["total"]
-
-    conn.close()
-
-    return render_template(
-        "admin_dashboard.html",
-        total_usuarios=total_usuarios,
-        total_talleres=total_talleres,
-        total_productos=total_productos,
-        total_servicios=total_servicios
-    )
-
-# --------------------------
-# LOGOUT ADMIN
-# --------------------------
-@routes.route("/admin/logout")
-def admin_logout():
+@routes.route("/logout")
+def logout():
     session.pop("usuario", None)
-    flash("Sesión de administrador cerrada ✅", "info")
-    return redirect(url_for("routes.login_admin"))
+    flash("Sesión cerrada ✅", "info")
+    return redirect(url_for("routes.login"))
 
 # --------------------------
-# EJEMPLO: USUARIOS (ADMIN)
+# LISTAR USUARIOS (solo admin)
 # --------------------------
 @routes.route("/usuarios")
+@login_required(rol="admin")
 def usuarios():
-    if "usuario" not in session or session["usuario"]["rol"] != "admin":
-        flash("Acceso no autorizado ❌", "danger")
-        return redirect(url_for("routes.login_admin"))
-
-    # resto de la lógica...
-
+    # lógica de administración...
+    return "Aquí iría la lista de usuarios (solo admin)"
 
 # --------------------------
 # EDITAR USUARIO (ADMIN)
 # --------------------------
 @routes.route("/usuarios/editar/<numdocumento>", methods=["GET", "POST"])
 def editar_usuario(numdocumento):
-    if "admin" not in session:
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
@@ -312,9 +279,9 @@ def editar_usuario(numdocumento):
 # --------------------------
 @routes.route("/usuarios/toggle/<numdocumento>", methods=["POST"])
 def toggle_usuario(numdocumento):
-    if "admin" not in session:
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
@@ -351,9 +318,9 @@ def toggle_usuario(numdocumento):
 # --------------------------
 @routes.route("/admin/productos")
 def admin_productos():
-    if "admin" not in session:
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
@@ -372,9 +339,9 @@ def admin_productos():
 # --------------------------
 @routes.route("/admin/servicios")
 def admin_servicios():
-    if "admin" not in session:
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
@@ -487,56 +454,32 @@ def agregar_vehiculo():
 # --------------------------
 @routes.route("/admin/publicaciones")
 def admin_publicaciones():
-    if "admin" not in session:
+    # Validar que el usuario sea admin
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
-
-    tipo = request.args.get("tipo")
-    fecha_inicio = request.args.get("fecha_inicio")
-    fecha_fin = request.args.get("fecha_fin")
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
-
-    query = """
-        SELECT rp.id_registro, rp.tipo, rp.id_referencia,
-               DATE_FORMAT(rp.fecha_registro, '%d-%m-%Y %H:%i:%s') AS fecha_registro,
-               rp.estado,
-               u.nombre_usu AS taller, u.correoElectronico
-        FROM registro_publicaciones rp
-        JOIN usuario u ON rp.id_usutaller = u.numdocumento
-        WHERE 1=1
-    """
-    params = []
-
-    if tipo and tipo != "todos":
-        query += " AND rp.tipo = %s"
-        params.append(tipo)
-
-    if fecha_inicio:
-        query += " AND rp.fecha_registro >= %s"
-        params.append(fecha_inicio + " 00:00:00")
-
-    if fecha_fin:
-        query += " AND rp.fecha_registro <= %s"
-        params.append(fecha_fin + " 23:59:59")
-
-    query += " ORDER BY rp.fecha_registro DESC"
-
-    cursor.execute(query, params)
-    registros = cursor.fetchall()
+    cursor.execute("""
+        SELECT p.*, u.nombre_usu AS taller
+        FROM publicacion p
+        JOIN usuario u ON p.id_usutaller = u.numdocumento
+    """)
+    publicaciones = cursor.fetchall()
     conn.close()
 
-    return render_template("admin_publicaciones.html", registros=registros, tipo=tipo, fecha_inicio=fecha_inicio, fecha_fin=fecha_fin)
+    return render_template("admin_publicaciones.html", publicaciones=publicaciones)
+
 
 # --------------------------
 # ADMIN - VER DETALLE PRODUCTO
 # --------------------------
 @routes.route("/admin/producto/<int:id_producto>")
 def admin_ver_producto(id_producto):
-    if "admin" not in session:
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
@@ -555,14 +498,15 @@ def admin_ver_producto(id_producto):
 
     return render_template("admin_ver_producto.html", producto=producto)
 
+
 # --------------------------
 # ADMIN - VER DETALLE SERVICIO
 # --------------------------
 @routes.route("/admin/servicio/<int:id_servicio>")
 def admin_ver_servicio(id_servicio):
-    if "admin" not in session:
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
@@ -581,14 +525,15 @@ def admin_ver_servicio(id_servicio):
 
     return render_template("admin_ver_servicio.html", servicio=servicio)
 
-    # --------------------------
+
+# --------------------------
 # ADMIN - SOLICITUDES DE TALLER
 # --------------------------
 @routes.route("/admin/solicitudes_taller")
 def solicitudes_taller():
-    if "admin" not in session:
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
@@ -609,9 +554,9 @@ def solicitudes_taller():
 # --------------------------
 @routes.route("/admin/solicitudes_taller/aceptar/<int:numdocumento>")
 def aceptar_taller(numdocumento):
-    if "admin" not in session:
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor()
@@ -628,9 +573,9 @@ def aceptar_taller(numdocumento):
 # --------------------------
 @routes.route("/admin/solicitudes_taller/rechazar/<int:numdocumento>")
 def rechazar_taller(numdocumento):
-    if "admin" not in session:
+    if "usuario" not in session or session["usuario"]["rol"] != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
-        return redirect(url_for("routes.login_admin"))
+        return redirect(url_for("routes.login"))
 
     conn = conectar_db()
     cursor = conn.cursor()
@@ -642,8 +587,6 @@ def rechazar_taller(numdocumento):
 
     flash("Solicitud de taller rechazada ❌", "info")
     return redirect(url_for("routes.solicitudes_taller"))
-
-
 
 # --------------------------
 # AGREGAR PRODUCTO AL CARRITO (permitir cliente o taller)

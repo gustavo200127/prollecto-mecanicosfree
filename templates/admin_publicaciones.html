@@ -4,72 +4,54 @@
 <div class="container mt-4">
     <h2>📋 Registro de Publicaciones</h2>
 
-    <!-- Filtros -->
-    <form method="get" class="row g-3 mb-4">
-        <div class="col-md-3">
-            <label class="form-label">Tipo</label>
-            <select class="form-select" name="tipo">
-                <option value="todos" {% if tipo == "todos" or not tipo %}selected{% endif %}>Todos</option>
-                <option value="producto" {% if tipo == "producto" %}selected{% endif %}>Producto</option>
-                <option value="servicio" {% if tipo == "servicio" %}selected{% endif %}>Servicio</option>
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Fecha Inicio</label>
-            <input type="date" class="form-control" name="fecha_inicio" value="{{ fecha_inicio or '' }}">
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Fecha Fin</label>
-            <input type="date" class="form-control" name="fecha_fin" value="{{ fecha_fin or '' }}">
-        </div>
-        <div class="col-md-3 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100">Filtrar</button>
-            <a href="{{ url_for('routes.admin_dashboard') }}" class="btn btn-secondary mb-3">⬅ Volver al Panel</a>
-        </div>
-    </form>
-
-    <!-- Tabla de registros -->
+    <!-- Tabla de publicaciones -->
     <table class="table table-striped table-bordered mt-3">
         <thead class="table-dark">
             <tr>
                 <th>ID</th>
                 <th>Tipo</th>
-                <th>ID Ref.</th>
+                <th>ID Referencia</th>
                 <th>Taller</th>
                 <th>Correo</th>
-                <th>Fecha y Hora</th>
+                <th>Fecha Registro</th>
                 <th>Estado</th>
             </tr>
         </thead>
         <tbody>
-            {% for r in registros %}
+            {% for p in publicaciones %}
             <tr>
-                <td>{{ r.id_registro }}</td>
-                <td>{{ r.tipo }}</td>
+                <td>{{ p.id_registro }}</td>
+                <td>{{ p.tipo }}</td>
                 <td>
-                    {% if r.tipo == "producto" %}
-                        <a href="{{ url_for('routes.admin_ver_producto', id_producto=r.id_referencia) }}">
-                            {{ r.id_referencia }}
+                    {% if p.tipo == "producto" %}
+                        <a href="{{ url_for('routes.admin_ver_producto', id_producto=p.id_referencia) }}">
+                            {{ p.id_referencia }}
                         </a>
                     {% else %}
-                        <a href="{{ url_for('routes.admin_ver_servicio', id_servicio=r.id_referencia) }}">
-                            {{ r.id_referencia }}
+                        <a href="{{ url_for('routes.admin_ver_servicio', id_servicio=p.id_referencia) }}">
+                            {{ p.id_referencia }}
                         </a>
                     {% endif %}
                 </td>
-                <td>{{ r.taller }}</td>
-                <td>{{ r.correoElectronico }}</td>
-                <td>{{ r.fecha_registro }}</td>
+                <td>{{ p.taller }}</td>
+                <td>{{ p.correoElectronico }}</td>
+                <td>{{ p.fecha_registro }}</td>
                 <td>
-                    {% if r.estado == "pendiente" %}
+                    {% if p.estado == "pendiente" %}
                         <span class="badge bg-warning text-dark">Pendiente</span>
                     {% else %}
                         <span class="badge bg-success">Revisado</span>
                     {% endif %}
                 </td>
             </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="text-center">No hay publicaciones disponibles</td>
+            </tr>
             {% endfor %}
         </tbody>
     </table>
+
+    <a href="{{ url_for('routes.admin_dashboard') }}" class="btn btn-secondary mt-3">⬅ Volver al Panel</a>
 </div>
 {% endblock %}
