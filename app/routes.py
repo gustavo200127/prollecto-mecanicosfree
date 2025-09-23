@@ -224,8 +224,37 @@ def logout():
 @routes.route("/usuarios")
 @login_required(rol="admin")
 def usuarios():
-    # lógica de administración...
-    return "Aquí iría la lista de usuarios (solo admin)"
+    # Obtener la página actual desde query string (?page=1)
+    page = request.args.get("page", 1, type=int)
+    per_page = 10  # número de usuarios por página
+    offset = (page - 1) * per_page
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Total de usuarios para calcular páginas
+    cursor.execute("SELECT COUNT(*) AS total FROM usuario")
+    total_usuarios = cursor.fetchone()["total"]
+
+    # Obtener solo los usuarios de la página actual
+    cursor.execute(
+        "SELECT * FROM usuario ORDER BY nombre_usu ASC LIMIT %s OFFSET %s",
+        (per_page, offset)
+    )
+    lista_usuarios = cursor.fetchall()
+    
+    conn.close()
+
+    total_pages = (total_usuarios + per_page - 1) // per_page  # ceil division
+
+    return render_template(
+        "admin_usuarios.html",
+        usuarios=lista_usuarios,
+        page=page,
+        total_pages=total_pages
+    )
+
+
 
 # --------------------------
 # EDITAR USUARIO (ADMIN)

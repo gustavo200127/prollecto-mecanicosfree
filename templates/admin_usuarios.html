@@ -1,0 +1,77 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>👥 Lista de Usuarios</h2>
+        <a href="{{ url_for('routes.admin_dashboard') }}" class="btn btn-secondary">Volver al Panel</a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <div class="mb-3">
+        {% for category, message in messages %}
+        <div class="alert alert-{{ category }}">{{ message }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <table class="table table-striped table-hover">
+        <thead>
+            <tr>
+                <th>Documento</th>
+                <th>Nombre</th>
+                <th>Correo</th>
+                <th>Activo</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in usuarios %}
+            <tr>
+                <td>{{ u.numdocumento }}</td>
+                <td>{{ u.nombre_usu }}</td>
+                <td>{{ u.correoElectronico }}</td>
+                <td>{{ 'Sí' if u.activo else 'No' }}</td>
+                <td>
+                    <a href="{{ url_for('routes.editar_usuario', numdocumento=u.numdocumento) }}" class="btn btn-sm btn-primary">Editar</a>
+                    
+                    <form action="{{ url_for('routes.toggle_usuario', numdocumento=u.numdocumento) }}" method="post" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-warning">
+                            {{ 'Deshabilitar' if u.activo else 'Habilitar' }}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<!-- Paginación -->
+<nav aria-label="Paginación usuarios">
+    <ul class="pagination justify-content-center">
+        {% if page > 1 %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('routes.usuarios', page=page-1) }}">Anterior</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">Anterior</span></li>
+        {% endif %}
+
+        {% for p in range(1, total_pages + 1) %}
+        <li class="page-item {% if p == page %}active{% endif %}">
+            <a class="page-link" href="{{ url_for('routes.usuarios', page=p) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+
+        {% if page < total_pages %}
+        <li class="page-item">
+            <a class="page-link" href="{{ url_for('routes.usuarios', page=page+1) }}">Siguiente</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">Siguiente</span></li>
+        {% endif %}
+    </ul>
+</nav>
+
+{% endblock %}
