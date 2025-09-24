@@ -22,23 +22,18 @@
                     <!-- Siempre visibles -->
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.inicio') }}">Inicio</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.catalogo') }}">Catálogo</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.block') }}">📝 Block</a></li>
                     
                     <!-- Opciones según rol -->
                     {% if session.get('usuario') %}
-                        
-                        {% if session['usuario']['rol'] == 'cliente' %}
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.perfil_cliente') }}">Perfil Cliente</a></li>
-                        
-                        {% elif session['usuario']['rol'] == 'taller' %}
+                        {% if session['usuario']['rol'] == 'taller' %}
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.perfil_taller') }}">Perfil Taller</a></li>
-                        
                         {% elif session['usuario']['rol'] == 'admin' %}
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.admin_dashboard') }}">Panel Admin</a></li>
                         {% endif %}
 
                         <!-- Cerrar sesión para todos los logueados -->
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.logout') }}">Cerrar Sesión</a></li>
-
                     {% else %}
                         <!-- Si no hay nadie logueado -->
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.login') }}">Iniciar Sesión</a></li>

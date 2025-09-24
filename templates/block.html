@@ -1,0 +1,48 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2 class="text-center mb-4">📝 Reseñas de Talleres</h2>
+
+<!-- Dropdown de talleres -->
+<div class="text-center mb-4">
+    <div class="dropdown">
+        <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+            Seleccionar Taller
+        </button>
+        <ul class="dropdown-menu">
+            {% for t in talleres %}
+                <li>
+                    <a class="dropdown-item" href="{{ url_for('routes.block_taller', id_taller=t.numdocumento) }}">
+                        {{ t.nombre_usu }}
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+<!-- Carrusel de comentarios generales -->
+{% if comentarios %}
+<div id="carouselComentarios" class="carousel slide" data-bs-ride="carousel">
+    <div class="carousel-inner">
+        {% for c in comentarios %}
+        <div class="carousel-item {% if loop.first %}active{% endif %}">
+            <div class="card shadow-sm p-4 text-center">
+                <h5 class="mb-1">⭐ {{ c.calificacion }}/5</h5>
+                <p class="mb-2">{{ c.comentario }}</p>
+                <small class="text-muted">Por {{ c.cliente_nombre }} en {{ c.fecha.strftime('%d/%m/%Y') }}</small>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <button class="carousel-control-prev" type="button" data-bs-target="#carouselComentarios" data-bs-slide="prev">
+        <span class="carousel-control-prev-icon"></span>
+    </button>
+    <button class="carousel-control-next" type="button" data-bs-target="#carouselComentarios" data-bs-slide="next">
+        <span class="carousel-control-next-icon"></span>
+    </button>
+</div>
+{% else %}
+    <p class="text-center text-muted">Aún no hay comentarios publicados.</p>
+{% endif %}
+
+{% endblock %}
