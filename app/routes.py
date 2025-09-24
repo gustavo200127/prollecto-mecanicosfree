@@ -1244,3 +1244,47 @@ def block_taller(id_taller):
     conn.close()
 
     return render_template("block_taller.html", taller=taller, comentarios=comentarios)
+
+@routes.route("/buscar", methods=["GET"])
+def buscar():
+    termino = request.args.get("q", "").strip()
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+
+    # Buscar productos
+    cursor.execute("""
+        SELECT 'producto' AS categoria, p.id_producto AS id, 
+               p.tipo_producto AS nombre, p.marca_producto AS detalle, 
+               p.precio_producto AS precio
+        FROM producto p
+        WHERE p.tipo_producto LIKE %s OR p.marca_producto LIKE %s
+    """, (f"%{termino}%", f"%{termino}%"))
+    productos = cursor.fetchall()
+
+    # Buscar servicios
+    cursor.execute("""
+        SELECT 'servicio' AS categoria, s.id_servicio AS id, 
+               s.tipo_servicio AS nombre, NULL AS detalle, s.precio AS precio
+        FROM servicio s
+        WHERE s.tipo_servicio LIKE %s
+    """, (f"%{termino}%",))
+    servicios = cursor.fetchall()
+
+    # Buscar talleres
+    cursor.execute("""
+        SELECT 'taller' AS categoria, u.numdocumento AS id, 
+               u.nombre_usu AS nombre, u.correoElectronico AS detalle, NULL AS precio
+        FROM usuario u
+        JOIN rol r ON u.numdocumento = r.numdocumento
+        WHERE r.tipoRol = 'taller' 
+          AND (u.nombre_usu LIKE %s OR u.correoElectronico LIKE %s)
+    """, (f"%{termino}%", f"%{termino}%"))
+    talleres = cursor.fetchall()
+
+    resultados = productos + servicios + talleres
+
+    cursor.close()
+    conn.close()
+
+    return render_template("buscar.html", termino=termino, resultados=resultados)

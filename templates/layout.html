@@ -44,6 +44,19 @@
         </div>
     </nav>
 
+    <!-- Barra de búsqueda global -->
+<div class="container mt-3">
+    <form action="{{ url_for('routes.buscar') }}" method="GET" class="d-flex">
+        <input class="form-control me-2" 
+               type="search" 
+               name="q" 
+               placeholder="🔎 Buscar productos o talleres..." 
+               aria-label="Buscar"
+               required>
+        <button class="btn btn-outline-success" type="submit">Buscar</button>
+    </form>
+</div>
+
     <!-- Contenido dinámico -->
     <div class="container mt-4">
         {% with messages = get_flashed_messages(with_categories=true) %}

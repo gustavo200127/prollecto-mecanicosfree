@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+{% block content %}
+<h2>Resultados de búsqueda: "{{ termino }}"</h2>
+
+{% if resultados %}
+    <ul class="list-group">
+        {% for r in resultados %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>{{ r.nombre }}</strong>
+                    {% if r.detalle %} - {{ r.detalle }}{% endif %}
+                    {% if r.precio %} - ${{ r.precio }}{% endif %}
+                    <span class="badge bg-primary">{{ r.categoria }}</span>
+                </div>
+
+                {% if r.categoria == 'taller' %}
+                    <!-- 🔹 Enlace directo al apartado de comentarios del taller -->
+                    <a href="{{ url_for('routes.block_taller', id_taller=r.id) }}" class="btn btn-sm btn-info">
+                        Ver comentarios
+                    </a>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p class="text-muted">No se encontraron resultados.</p>
+{% endif %}
+{% endblock %}
