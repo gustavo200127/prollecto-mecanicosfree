@@ -1,6 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 import mysql.connector
 from functools import wraps
+import re          # <-- necesario para expresiones regulares
+import bcrypt      # <-- necesario para hashear contraseñas
 
 routes = Blueprint("routes", __name__)
 
@@ -73,16 +75,16 @@ def catalogo():
 def login():
     if request.method == "POST":
         correo = request.form.get("correoElectronico")
-        contrasena = request.form.get("contrasena")
+        contrasena_ingresada = request.form.get("contrasena")
 
         conn = conectar_db()
         cursor = conn.cursor(dictionary=True)
         cursor.execute("""
-            SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, u.activo, r.tipoRol
+            SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, u.activo, r.tipoRol, u.contrasena
             FROM usuario u
             JOIN rol r ON u.numdocumento = r.numdocumento
-            WHERE u.correoElectronico=%s AND u.contrasena=%s
-        """, (correo, contrasena))
+            WHERE u.correoElectronico=%s
+        """, (correo,))
         usuario = cursor.fetchone()
         conn.close()
 
@@ -91,6 +93,13 @@ def login():
                 flash("Tu cuenta ha sido deshabilitada ❌", "danger")
                 return redirect(url_for("routes.login"))
 
+            # 1️⃣ Verificar contraseña con bcrypt
+            hash_guardado = usuario["contrasena"]
+            if not bcrypt.checkpw(contrasena_ingresada.encode('utf-8'), hash_guardado.encode('utf-8')):
+                flash("Correo o contraseña incorrectos ❌", "danger")
+                return redirect(url_for("routes.login"))
+
+            # 2️⃣ Guardar sesión
             session["usuario"] = {
                 "numdocumento": usuario["numdocumento"],
                 "nombre_usu": usuario["nombre_usu"],
@@ -99,7 +108,7 @@ def login():
             }
             flash("Inicio de sesión exitoso ✅", "success")
 
-            # Redirección según rol
+            # 3️⃣ Redirección según rol
             rol = usuario["tipoRol"]
             if rol == "admin":
                 return redirect(url_for("routes.admin_dashboard"))
@@ -119,6 +128,15 @@ def login():
 @login_required(rol="cliente")
 def perfil_cliente():
     return render_template("perfil_cliente.html", usuario=session["usuario"])
+    
+# --------------------------
+# LOGOUT UNIFICADO
+# --------------------------
+@routes.route("/logout")
+def logout():
+    session.pop("usuario", None)
+    flash("Sesión cerrada ✅", "info")
+    return redirect(url_for("routes.login"))    
 
 # --------------------------
 # PERFIL TALLER
@@ -169,10 +187,27 @@ def registrar_usuario():
         nombre_usu = request.form["nombre_usu"]
         correoElectronico = request.form["correoElectronico"]
         contrasena = request.form["contrasena"]
+        contrasena2 = request.form.get("contrasena2")
+        rol = request.form.get("rol", "cliente")
 
+        # 1️⃣ Validar que las contraseñas coincidan
+        if contrasena != contrasena2:
+            flash("Las contraseñas no coinciden ❌", "danger")
+            return redirect(url_for("routes.registrar_usuario"))
+
+        # 2️⃣ Validar contraseña mínima 8 caracteres con letras y números
+        if not re.match(r'^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$', contrasena):
+            flash("La contraseña debe tener al menos 8 caracteres, incluyendo letras y números ❌", "danger")
+            return redirect(url_for("routes.registrar_usuario"))
+
+        # 3️⃣ Hashear la contraseña con bcrypt
+        hashed = bcrypt.hashpw(contrasena.encode('utf-8'), bcrypt.gensalt())
+
+        # 4️⃣ Conectar a la base de datos
         conn = conectar_db()
         cursor = conn.cursor(dictionary=True)
 
+        # 5️⃣ Verificar si el documento o correo ya existen
         cursor.execute(
             "SELECT * FROM usuario WHERE numdocumento=%s OR correoElectronico=%s",
             (numdocumento, correoElectronico)
@@ -184,22 +219,20 @@ def registrar_usuario():
             conn.close()
             return redirect(url_for("routes.registrar_usuario"))
 
-        cursor = conn.cursor()
+        # 6️⃣ Insertar usuario en la tabla 'usuario'
         cursor.execute(
             "INSERT INTO usuario (numdocumento, nombre_usu, correoElectronico, contrasena) VALUES (%s, %s, %s, %s)",
-            (numdocumento, nombre_usu, correoElectronico, contrasena)
+            (numdocumento, nombre_usu, correoElectronico, hashed.decode('utf-8'))
         )
         conn.commit()
 
-        rol = request.form.get("rol", "cliente")
-        if rol == "taller":
-            rol = "pendiente_taller"
-        else:
-            rol = "cliente"
+        # 7️⃣ Ajustar rol según la selección
+        rol_db = "pendiente_taller" if rol == "taller" else "cliente"
 
+        # 8️⃣ Insertar rol en la tabla 'rol'
         cursor.execute(
             "INSERT INTO rol (numdocumento, tipoRol) VALUES (%s, %s)",
-            (numdocumento, rol)
+            (numdocumento, rol_db)
         )
         conn.commit()
         conn.close()
@@ -207,16 +240,8 @@ def registrar_usuario():
         flash("Usuario registrado con éxito ✅", "success")
         return redirect(url_for("routes.login"))
 
+    # Si es GET, mostrar el formulario
     return render_template("registrar_usuario.html")
-
-# --------------------------
-# LOGOUT UNIFICADO
-# --------------------------
-@routes.route("/logout")
-def logout():
-    session.pop("usuario", None)
-    flash("Sesión cerrada ✅", "info")
-    return redirect(url_for("routes.login"))
 
 # --------------------------
 # LISTAR USUARIOS (solo admin)

@@ -2,7 +2,7 @@
 {% block content %}
 <div class="container mt-4">
   <h2>Nuevo Usuario</h2>
-  <form method="post" action="{{ url_for('routes.registrar_usuario') }}">
+  <form method="post" action="{{ url_for('routes.registrar_usuario') }}" id="registroForm">
     
     <div class="mb-3">
       <label>Documento</label>
@@ -21,12 +21,19 @@
 
     <div class="mb-3">
       <label>Contraseña</label>
-      <input name="contrasena" class="form-control" type="password" required>
+      <input name="contrasena" class="form-control" type="password" 
+             id="contrasena" required
+             pattern="^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$"
+             title="La contraseña debe tener al menos 8 caracteres, incluyendo letras y números.">
     </div>
 
     <div class="mb-3">
       <label>Repetir Contraseña</label>
-      <input name="contrasena2" class="form-control" type="password" required>
+      <input name="contrasena2" class="form-control" type="password" 
+             id="contrasena2" required
+             pattern="^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d]{8,}$"
+             title="La contraseña debe tener al menos 8 caracteres, incluyendo letras y números.">
+      <small id="errorPass" class="text-danger"></small>
     </div>
 
     <div class="mb-3">
@@ -44,4 +51,22 @@
     <a href="{{ url_for('routes.usuarios') }}" class="btn btn-secondary">Cancelar</a>
   </form>
 </div>
+
+<script>
+  // Validación en tiempo real de contraseñas
+  const form = document.getElementById('registroForm');
+  const pass1 = document.getElementById('contrasena');
+  const pass2 = document.getElementById('contrasena2');
+  const errorPass = document.getElementById('errorPass');
+
+  form.addEventListener('submit', function(e) {
+    if (pass1.value !== pass2.value) {
+      e.preventDefault();
+      errorPass.textContent = "Las contraseñas no coinciden ❌";
+      pass2.focus();
+    } else {
+      errorPass.textContent = "";
+    }
+  });
+</script>
 {% endblock %}
