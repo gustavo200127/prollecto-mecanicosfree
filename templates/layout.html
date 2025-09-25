@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mecánicos Free</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- ✅ Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 </head>
 <body>
     <!-- Barra de navegación -->
@@ -19,8 +17,7 @@
             </button>
             
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-
+                <ul class="navbar-nav me-auto">
                     <!-- Siempre visibles -->
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.inicio') }}">Inicio</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.catalogo') }}">Catálogo</a></li>
@@ -33,31 +30,26 @@
                         {% elif session['usuario']['rol'] == 'admin' %}
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.admin_dashboard') }}">Panel Admin</a></li>
                         {% endif %}
-
-                        <!-- Cerrar sesión -->
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.logout') }}">Cerrar Sesión</a></li>
                     {% else %}
-                        <!-- Invitados -->
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.login') }}">Iniciar Sesión</a></li>
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.registrar_usuario') }}">Registrar Usuario</a></li>
                     {% endif %}
                 </ul>
+
+                <!-- 🔎 Barra de búsqueda integrada en la navbar -->
+                <form action="{{ url_for('routes.buscar') }}" method="GET" class="d-flex">
+                    <input class="form-control me-2" 
+                           type="search" 
+                           name="q" 
+                           placeholder="Buscar productos o talleres..." 
+                           aria-label="Buscar en Mecánicos Free"
+                           required>
+                    <button class="btn btn-outline-success" type="submit">Buscar</button>
+                </form>
             </div>
         </div>
     </nav>
-
-    <!-- Barra de búsqueda global -->
-    <div class="container mt-3">
-        <form action="{{ url_for('routes.buscar') }}" method="GET" class="d-flex">
-            <input class="form-control me-2" 
-                   type="search" 
-                   name="q" 
-                   placeholder="🔎 Buscar productos o talleres..." 
-                   aria-label="Buscar en Mecánicos Free"
-                   required>
-            <button class="btn btn-outline-success" type="submit">Buscar</button>
-        </form>
-    </div>
 
     <!-- Contenido dinámico -->
     <div class="container mt-4">
