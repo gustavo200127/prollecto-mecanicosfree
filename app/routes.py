@@ -491,9 +491,9 @@ def admin_publicaciones():
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
-        SELECT p.*, u.nombre_usu AS taller
-        FROM publicacion p
-        JOIN usuario u ON p.id_usutaller = u.numdocumento
+        SELECT rp.*, u.nombre_usu AS taller
+        FROM registro_publicaciones rp
+        JOIN usuario u ON rp.id_usutaller = u.numdocumento
     """)
     publicaciones = cursor.fetchall()
     conn.close()
@@ -1160,91 +1160,180 @@ def proveedor_actualizar_pedido(id_pedido, estado):
     flash(f"Pedido #{id_pedido} actualizado a {estado} ✅", "success")
     return redirect(url_for("routes.proveedor_pedidos"))
 
-    # --------------------------
-# BLOK GENERAL (reseñas de talleres)
 # --------------------------
-@routes.route("/block")
-def block():
+# LISTADO DE TALLERES (con reseñas resumidas)
+# --------------------------
+@routes.route("/comentarios")
+def comentarios_listado():
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
 
-    # Traer lista de talleres
-    cursor.execute("""
-        SELECT u.numdocumento, u.nombre_usu
-        FROM usuario u
-        JOIN rol r ON u.numdocumento = r.numdocumento
-        WHERE r.tipoRol = 'taller'
-    """)
-    talleres = cursor.fetchall()
+    talleres, comentarios, todos_talleres = [], [], []
+    try:
+        # 🔹 Talleres con al menos un comentario
+        cursor.execute("""
+            SELECT DISTINCT ut.numdocumento AS taller_id, ut.nombre_usu AS taller_nombre
+            FROM comentarios c
+            JOIN usuario ut ON c.id_usutaller = ut.numdocumento
+        """)
+        talleres = cursor.fetchall()
 
-    # Traer comentarios generales (de todos los talleres)
-    cursor.execute("""
-        SELECT b.comentario, b.calificacion, b.fecha, u.nombre_usu AS cliente_nombre
-        FROM block b
-        JOIN usuario u ON b.id_usucliente = u.numdocumento
-        ORDER BY b.fecha DESC
-    """)
-    comentarios = cursor.fetchall()
+        # 🔹 Todos los talleres (para el modal)
+        cursor.execute("""
+            SELECT u.numdocumento AS taller_id, u.nombre_usu AS taller_nombre
+            FROM usuario u
+            JOIN rol r ON u.numdocumento = r.numdocumento
+            WHERE r.tipoRol = 'taller'
+        """)
+        todos_talleres = cursor.fetchall()
 
-    cursor.close()
-    conn.close()
+        # 🔹 Comentarios más recientes
+        cursor.execute("""
+            SELECT c.comentario, c.calificacion, c.fecha,
+                   uc.nombre_usu AS cliente_nombre,
+                   ut.nombre_usu AS taller_nombre,
+                   ut.numdocumento AS taller_id
+            FROM comentarios c
+            JOIN usuario uc ON c.id_usucliente = uc.numdocumento
+            JOIN usuario ut ON c.id_usutaller = ut.numdocumento
+            ORDER BY c.fecha DESC
+        """)
+        comentarios = cursor.fetchall()
 
-    return render_template("block.html", talleres=talleres, comentarios=comentarios)
+        # 🔹 Normalizar fechas
+        for c in comentarios:
+            if isinstance(c["fecha"], str):
+                try:
+                    c["fecha"] = datetime.strptime(c["fecha"], "%Y-%m-%d %H:%M:%S")
+                except:
+                    pass
 
-@routes.route("/block/<int:id_taller>", methods=["GET", "POST"])
-def block_taller(id_taller):
-    conn = conectar_db()
-    cursor = conn.cursor(dictionary=True)
-
-    # 🔹 Obtener datos del taller (JOIN con la tabla rol)
-    cursor.execute("""
-        SELECT u.numdocumento, u.nombre_usu, u.correoElectronico
-        FROM usuario u
-        JOIN rol r ON u.numdocumento = r.numdocumento
-        WHERE u.numdocumento = %s AND r.tipoRol = 'taller'
-    """, (id_taller,))
-    taller = cursor.fetchone()
-
-    if not taller:
-        flash("Taller no encontrado ❌", "danger")
+    finally:
         cursor.close()
         conn.close()
-        return redirect(url_for("routes.catalogo"))
 
-    # 🔹 Si es POST y usuario es cliente => insertar comentario
-    if request.method == "POST":
-        if "usuario" in session and session["usuario"]["rol"] == "cliente":
-            comentario = request.form["comentario"].strip()
-            calificacion = int(request.form["calificacion"])
-            id_cliente = session["usuario"]["numdocumento"]
+    return render_template(
+        "comentarios.html",
+        talleres=talleres,            # Solo con reseñas
+        comentarios=comentarios,      # Todas las reseñas
+        todos_talleres=todos_talleres # Todos para el modal
+    )
 
-            if 1 <= calificacion <= 5:  # 👈 validación del rango
-                cursor.execute("""
-                    INSERT INTO block (comentario, id_usucliente, id_usutaller, calificacion, fecha)
-                    VALUES (%s, %s, %s, %s, NOW())
-                """, (comentario, id_cliente, id_taller, calificacion))
-                conn.commit()
-                flash("Comentario publicado ✅", "success")
+
+# --------------------------
+# DETALLE DE TALLER (reseñas específicas)
+# --------------------------
+@routes.route("/comentarios/<int:id_taller>", methods=["GET", "POST"])
+def comentarios_taller(id_taller):
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+
+    taller, comentarios = None, []
+    try:
+        # 🔹 Obtener datos del taller
+        cursor.execute("""
+            SELECT u.numdocumento AS taller_id, u.nombre_usu, u.correoElectronico
+            FROM usuario u
+            JOIN rol r ON u.numdocumento = r.numdocumento
+            WHERE u.numdocumento = %s AND r.tipoRol = 'taller'
+        """, (id_taller,))
+        taller = cursor.fetchone()
+
+        if not taller:
+            flash("Taller no encontrado ❌", "danger")
+            return redirect(url_for("routes.catalogo"))
+
+        # 🔹 Si es POST y usuario es cliente => insertar comentario
+        if request.method == "POST":
+            if "usuario" in session and session["usuario"]["rol"] == "cliente":
+                comentario = request.form.get("comentario", "").strip()
+                try:
+                    calificacion = int(request.form.get("calificacion", 0))
+                except ValueError:
+                    calificacion = 0
+                id_cliente = session["usuario"]["numdocumento"]
+
+                if comentario and 1 <= calificacion <= 5:
+                    cursor.execute("""
+                        INSERT INTO comentarios (comentario, id_usucliente, id_usutaller, calificacion, fecha)
+                        VALUES (%s, %s, %s, %s, NOW())
+                    """, (comentario, id_cliente, id_taller, calificacion))
+                    conn.commit()
+                    flash("Comentario publicado ✅", "success")
+                else:
+                    flash("Comentario o calificación inválida ❌", "danger")
             else:
-                flash("La calificación debe estar entre 1 y 5 ❌", "danger")
-        else:
-            flash("Debes iniciar sesión como cliente para comentar ❌", "danger")
+                flash("Debes iniciar sesión como cliente para comentar ❌", "danger")
 
-    # 🔹 Traer comentarios del taller con nombre del cliente
-    cursor.execute("""
-        SELECT b.comentario, b.calificacion, b.fecha, u.nombre_usu AS cliente_nombre
-        FROM block b
-        JOIN usuario u ON b.id_usucliente = u.numdocumento
-        WHERE b.id_usutaller = %s
-        ORDER BY b.fecha DESC
-    """, (id_taller,))
-    comentarios = cursor.fetchall()
+        # 🔹 Traer comentarios del taller
+        cursor.execute("""
+            SELECT c.comentario, c.calificacion, c.fecha,
+                   uc.nombre_usu AS cliente_nombre,
+                   ut.nombre_usu AS taller_nombre,
+                   ut.numdocumento AS taller_id
+            FROM comentarios c
+            JOIN usuario uc ON c.id_usucliente = uc.numdocumento
+            JOIN usuario ut ON c.id_usutaller = ut.numdocumento
+            WHERE c.id_usutaller = %s
+            ORDER BY c.fecha DESC
+        """, (id_taller,))
+        comentarios = cursor.fetchall()
 
-    cursor.close()
-    conn.close()
+        # 🔹 Normalizar fechas
+        for c in comentarios:
+            if isinstance(c["fecha"], str):
+                try:
+                    c["fecha"] = datetime.strptime(c["fecha"], "%Y-%m-%d %H:%M:%S")
+                except:
+                    pass
 
-    return render_template("block_taller.html", taller=taller, comentarios=comentarios)
+    finally:
+        cursor.close()
+        conn.close()
 
+    return render_template("comentarios_taller.html", taller=taller, comentarios=comentarios)
+
+
+# --------------------------
+# NUEVO COMENTARIO (desde modal en listado)
+# --------------------------
+@routes.route("/comentarios/nuevo", methods=["POST"])
+def nuevo_comentario():
+    if "usuario" not in session or session["usuario"]["rol"] != "cliente":
+        flash("Debes iniciar sesión como cliente para comentar ❌", "danger")
+        return redirect(url_for("routes.comentarios_listado"))
+
+    id_taller = request.form.get("id_taller")
+    comentario = request.form.get("comentario", "").strip()
+    try:
+        calificacion = int(request.form.get("calificacion", 0))
+    except ValueError:
+        calificacion = 0
+    id_cliente = session["usuario"]["numdocumento"]
+
+    if not id_taller or not comentario or not (1 <= calificacion <= 5):
+        flash("Datos inválidos ❌", "danger")
+        return redirect(url_for("routes.comentarios_listado"))
+
+    conn = conectar_db()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        cursor.execute("""
+            INSERT INTO comentarios (comentario, id_usucliente, id_usutaller, calificacion, fecha)
+            VALUES (%s, %s, %s, %s, NOW())
+        """, (comentario, id_cliente, id_taller, calificacion))
+        conn.commit()
+        flash("Comentario publicado ✅", "success")
+    finally:
+        cursor.close()
+        conn.close()
+
+    return redirect(url_for("routes.comentarios_taller", id_taller=id_taller))
+
+
+# --------------------------
+# BUSCADOR (productos, servicios y talleres)
+# --------------------------
 @routes.route("/buscar", methods=["GET"])
 def buscar():
     termino = request.args.get("q", "").strip()
@@ -1252,7 +1341,7 @@ def buscar():
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
 
-    # Buscar productos
+    # 🔹 Buscar productos
     cursor.execute("""
         SELECT 'producto' AS categoria, p.id_producto AS id, 
                p.tipo_producto AS nombre, p.marca_producto AS detalle, 
@@ -1262,7 +1351,7 @@ def buscar():
     """, (f"%{termino}%", f"%{termino}%"))
     productos = cursor.fetchall()
 
-    # Buscar servicios
+    # 🔹 Buscar servicios
     cursor.execute("""
         SELECT 'servicio' AS categoria, s.id_servicio AS id, 
                s.tipo_servicio AS nombre, NULL AS detalle, s.precio AS precio
@@ -1271,7 +1360,7 @@ def buscar():
     """, (f"%{termino}%",))
     servicios = cursor.fetchall()
 
-    # Buscar talleres
+    # 🔹 Buscar talleres
     cursor.execute("""
         SELECT 'taller' AS categoria, u.numdocumento AS id, 
                u.nombre_usu AS nombre, u.correoElectronico AS detalle, NULL AS precio

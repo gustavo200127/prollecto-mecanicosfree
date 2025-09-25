@@ -1,0 +1,63 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="container mt-4">
+
+    <!-- Título del taller -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>🔧 Reseñas de <b>{{ taller.nombre_usu }}</b></h2>
+        <a href="{{ url_for('routes.comentarios_listado') }}" class="btn btn-secondary btn-sm">⬅ Volver</a>
+    </div>
+
+    <!-- 🔹 Formulario de comentario (solo clientes) -->
+    {% if session.get('usuario') and session['usuario']['rol'] == 'cliente' %}
+    <div class="card mb-4 shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">✍️ Deja tu reseña</h5>
+            <form method="POST">
+                <div class="mb-3">
+                    <label for="comentario" class="form-label">Tu comentario</label>
+                    <textarea name="comentario" id="comentario" class="form-control" rows="3" required></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="calificacion" class="form-label">Calificación</label>
+                    <select name="calificacion" id="calificacion" class="form-select" required>
+                        <option value="5">⭐⭐⭐⭐⭐ (5)</option>
+                        <option value="4">⭐⭐⭐⭐ (4)</option>
+                        <option value="3">⭐⭐⭐ (3)</option>
+                        <option value="2">⭐⭐ (2)</option>
+                        <option value="1">⭐ (1)</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-success">Publicar comentario</button>
+            </form>
+        </div>
+    </div>
+    {% else %}
+    <!-- 🔹 Mensaje si NO es cliente -->
+    <div class="alert alert-info text-center mb-4">
+        🔒 Debes <a href="{{ url_for('routes.login') }}">iniciar sesión</a> como <b>cliente</b> para dejar un comentario.
+    </div>
+    {% endif %}
+
+    <!-- 🔹 Listado de comentarios -->
+    <h4 class="mb-3">💬 Opiniones de clientes</h4>
+    {% if comentarios %}
+    <div class="list-group">
+        {% for c in comentarios %}
+        <div class="list-group-item list-group-item-action mb-2 shadow-sm rounded">
+            <p class="mb-1">"{{ c.comentario }}"</p>
+            <small class="text-muted">
+                👤 <b>{{ c.cliente_nombre }}</b> |
+                ⭐ {{ c.calificacion }}/5 |
+                📅 {{ c.fecha.strftime("%d/%m/%Y %H:%M:%S") if c.fecha else "" }}
+            </small>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+        <p class="text-muted">❌ Aún no hay comentarios para este taller.</p>
+    {% endif %}
+</div>
+
+{% endblock %}

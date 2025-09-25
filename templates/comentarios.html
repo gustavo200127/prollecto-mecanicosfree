@@ -2,17 +2,26 @@
 {% block content %}
 <h2 class="text-center mb-4">📝 Reseñas de Talleres</h2>
 
-<!-- Dropdown de talleres -->
+<!-- 🔹 Mensaje para clientes -->
+<div class="alert alert-info text-center">
+    {% if session.get('usuario') and session['usuario']['rol'] == 'cliente' %}
+        ✍️ Selecciona un taller en el menú desplegable para dejar tu comentario.
+    {% else %}
+        🔒 Debes <a href="{{ url_for('routes.login') }}">iniciar sesión</a> como <b>cliente</b> para dejar un comentario.
+    {% endif %}
+</div>
+
+<!-- 🔹 Dropdown de talleres -->
 <div class="text-center mb-4">
     <div class="dropdown">
         <button class="btn btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
             Seleccionar Taller
         </button>
         <ul class="dropdown-menu">
-            {% for t in talleres %}
+            {% for t in todos_talleres %}
                 <li>
-                    <a class="dropdown-item" href="{{ url_for('routes.block_taller', id_taller=t.numdocumento) }}">
-                        {{ t.nombre_usu }}
+                    <a class="dropdown-item" href="{{ url_for('routes.comentarios_taller', id_taller=t.taller_id) }}">
+                        {{ t.taller_nombre }}
                     </a>
                 </li>
             {% endfor %}
@@ -20,20 +29,26 @@
     </div>
 </div>
 
-<!-- Carrusel de comentarios generales -->
+<!-- 🔹 Carrusel de reseñas (todas juntas, agrupadas por taller) -->
 {% if comentarios %}
 <div id="carouselComentarios" class="carousel slide" data-bs-ride="carousel">
     <div class="carousel-inner">
         {% for c in comentarios %}
         <div class="carousel-item {% if loop.first %}active{% endif %}">
             <div class="card shadow-sm p-4 text-center">
-                <h5 class="mb-1">⭐ {{ c.calificacion }}/5</h5>
-                <p class="mb-2">{{ c.comentario }}</p>
-                <small class="text-muted">Por {{ c.cliente_nombre }} en {{ c.fecha.strftime('%d/%m/%Y') }}</small>
+                <h5 class="mb-1">{{ c.taller_nombre }}</h5>
+                <h6 class="text-warning">⭐ {{ c.calificacion }}/5</h6>
+                <p class="mb-2">"{{ c.comentario }}"</p>
+                <small class="text-muted">
+                    Cliente: <b>{{ c.cliente_nombre }}</b> |
+                    {{ c.fecha.strftime('%d/%m/%Y') if c.fecha else '' }}
+                </small>
             </div>
         </div>
         {% endfor %}
     </div>
+
+    <!-- Controles -->
     <button class="carousel-control-prev" type="button" data-bs-target="#carouselComentarios" data-bs-slide="prev">
         <span class="carousel-control-prev-icon"></span>
     </button>

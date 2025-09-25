@@ -15,14 +15,15 @@
 
                 {% if r.categoria == 'taller' %}
                     <!-- 🔹 Enlace directo al apartado de comentarios del taller -->
-                    <a href="{{ url_for('routes.block_taller', id_taller=r.id) }}" class="btn btn-sm btn-info">
-                        Ver comentarios
+                    <a href="{{ url_for('routes.comentarios_taller', id_taller=r.id) }}" 
+                       class="btn btn-sm btn-info">
+                        🔧 Ver comentarios
                     </a>
                 {% endif %}
             </li>
         {% endfor %}
     </ul>
 {% else %}
-    <p class="text-muted">No se encontraron resultados.</p>
+    <p class="text-muted">❌ No se encontraron resultados.</p>
 {% endif %}
 {% endblock %}
