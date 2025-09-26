@@ -3,6 +3,10 @@ import mysql.connector
 from functools import wraps
 import re          # <-- necesario para expresiones regulares
 import bcrypt      # <-- necesario para hashear contraseñas
+from datetime import datetime, timedelta
+import smtplib
+from email.mime.text import MIMEText
+
 
 routes = Blueprint("routes", __name__)
 
@@ -68,9 +72,10 @@ def catalogo():
 
     return render_template("catalogo.html", productos=productos, servicios=servicios)
 
-# --------------------------
-# LOGIN UNIFICADO (cliente / taller / admin)
-# --------------------------
+# Configuración de tiempo de bloqueo en minutos
+TIEMPO_BLOQUEO_MIN = 15
+MAX_INTENTOS = 3
+
 @routes.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -79,47 +84,124 @@ def login():
 
         conn = conectar_db()
         cursor = conn.cursor(dictionary=True)
+
+        # Obtener usuario y rol
         cursor.execute("""
-            SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, u.activo, r.tipoRol, u.contrasena
+            SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, u.activo, u.intentos_fallidos,
+                   u.bloqueado, u.fecha_bloqueo, r.tipoRol, u.contrasena
             FROM usuario u
             JOIN rol r ON u.numdocumento = r.numdocumento
             WHERE u.correoElectronico=%s
         """, (correo,))
         usuario = cursor.fetchone()
+
+        if not usuario:
+            flash("Correo o contraseña incorrectos ❌", "danger")
+            return redirect(url_for("routes.login"))
+
+        numdocumento = usuario["numdocumento"]
+
+        # Verificar si la cuenta está bloqueada
+        if usuario['bloqueado']:
+            if usuario['fecha_bloqueo'] and datetime.now() - usuario['fecha_bloqueo'] > timedelta(minutes=TIEMPO_BLOQUEO_MIN):
+                # desbloquear automáticamente
+                cursor.execute("""
+                    UPDATE usuario SET bloqueado=FALSE, intentos_fallidos=0, fecha_bloqueo=NULL
+                    WHERE correoElectronico=%s
+                """, (correo,))
+                conn.commit()
+                usuario['bloqueado'] = False
+                usuario['intentos_fallidos'] = 0
+            else:
+                flash("Cuenta bloqueada. Revisa tu correo ❌", "danger")
+                conn.close()
+                return redirect(url_for("routes.login"))
+
+        # Verificar contraseña con bcrypt
+        hash_guardado = usuario["contrasena"]
+        if not bcrypt.checkpw(contrasena_ingresada.encode('utf-8'), hash_guardado.encode('utf-8')):
+            # Incrementar intentos fallidos
+            intentos = usuario['intentos_fallidos'] + 1
+            cursor.execute("UPDATE usuario SET intentos_fallidos=%s WHERE correoElectronico=%s", (intentos, correo))
+            
+            # Registrar intento fallido
+            cursor.execute("INSERT INTO intentos_login (numdocumento, correoElectronico, exito) VALUES (%s, %s, %s)",
+                           (numdocumento, correo, False))
+            
+            if intentos >= MAX_INTENTOS:
+                cursor.execute("""
+                    UPDATE usuario SET bloqueado=TRUE, fecha_bloqueo=%s WHERE correoElectronico=%s
+                """, (datetime.now(), correo))
+                enviar_correo_bloqueo(correo)
+                flash("Cuenta bloqueada tras 3 intentos fallidos. Revisa tu correo ❌", "danger")
+            else:
+                flash(f"Correo o contraseña incorrectos. Te quedan {MAX_INTENTOS-intentos} intentos ❌", "danger")
+
+            conn.commit()
+            conn.close()
+            return redirect(url_for("routes.login"))
+
+        # Contraseña correcta: resetear intentos y registrar login exitoso
+        cursor.execute("UPDATE usuario SET intentos_fallidos=0 WHERE correoElectronico=%s", (correo,))
+        cursor.execute("INSERT INTO intentos_login (numdocumento, correoElectronico, exito) VALUES (%s, %s, %s)",
+                       (numdocumento, correo, True))
+        conn.commit()
         conn.close()
 
-        if usuario:
-            if not usuario["activo"]:
-                flash("Tu cuenta ha sido deshabilitada ❌", "danger")
-                return redirect(url_for("routes.login"))
+        # Guardar sesión
+        session["usuario"] = {
+            "numdocumento": usuario["numdocumento"],
+            "nombre_usu": usuario["nombre_usu"],
+            "correoElectronico": usuario["correoElectronico"],
+            "rol": usuario["tipoRol"]
+        }
+        flash("Inicio de sesión exitoso ✅", "success")
 
-            # 1️⃣ Verificar contraseña con bcrypt
-            hash_guardado = usuario["contrasena"]
-            if not bcrypt.checkpw(contrasena_ingresada.encode('utf-8'), hash_guardado.encode('utf-8')):
-                flash("Correo o contraseña incorrectos ❌", "danger")
-                return redirect(url_for("routes.login"))
-
-            # 2️⃣ Guardar sesión
-            session["usuario"] = {
-                "numdocumento": usuario["numdocumento"],
-                "nombre_usu": usuario["nombre_usu"],
-                "correoElectronico": usuario["correoElectronico"],
-                "rol": usuario["tipoRol"]
-            }
-            flash("Inicio de sesión exitoso ✅", "success")
-
-            # 3️⃣ Redirección según rol
-            rol = usuario["tipoRol"]
-            if rol == "admin":
-                return redirect(url_for("routes.admin_dashboard"))
-            elif rol == "taller":
-                return redirect(url_for("routes.perfil_taller"))
-            else:
-                return redirect(url_for("routes.perfil_cliente"))
+        # Redirección según rol
+        rol = usuario["tipoRol"]
+        if rol == "admin":
+            return redirect(url_for("routes.admin_dashboard"))
+        elif rol == "taller":
+            return redirect(url_for("routes.perfil_taller"))
         else:
-            flash("Correo o contraseña incorrectos ❌", "danger")
+            return redirect(url_for("routes.perfil_cliente"))
 
     return render_template("login.html")
+# --------------------------
+# Función para enviar correo de bloqueo
+# --------------------------
+import smtplib
+from email.mime.text import MIMEText
+
+def enviar_correo_bloqueo(correo_destino):
+    remitente = "mecanicosfree@gmail.com"         # Tu correo de envío
+    password_remitente = "utgqdstkkgsrdbwx"       # Tu App Password (sin espacios)
+    asunto = "Cuenta bloqueada por intentos fallidos"
+    mensaje = f"""
+Hola,
+
+Tu cuenta ha sido bloqueada tras 3 intentos fallidos de inicio de sesión.
+Por seguridad, espera 15 minutos o contacta soporte para desbloquearla.
+
+Atentamente,
+Equipo Mecánicos Free
+"""
+
+    # Crear mensaje MIME
+    msg = MIMEText(mensaje, "plain", "utf-8")
+    msg['Subject'] = asunto
+    msg['From'] = remitente
+    msg['To'] = correo_destino
+
+    try:
+        # Conexión segura SSL con Gmail
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(remitente, password_remitente)
+            server.sendmail(remitente, correo_destino, msg.as_string())
+        print(f"📧 Correo de bloqueo enviado a {correo_destino}")
+    except Exception as e:
+        print(f"❌ Error al enviar correo a {correo_destino}: {e}")
+
 
 # --------------------------
 # PERFIL CLIENTE
