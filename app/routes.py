@@ -28,21 +28,52 @@ def get_serializer():
     return URLSafeTimedSerializer(current_app.secret_key)
 
 # --------------------------
-# DECORADOR PARA RUTAS PROTEGIDAS POR ROL
+# DECORADOR LOGIN REQUIRED ÚNICO (expiración + roles)
 # --------------------------
-def login_required(rol=None):
-    def wrapper(f):
+SESSION_TIMEOUT = 15 * 60  # 15 minutos
+
+def login_required(rol=None, roles=None):
+    def decorator(f):
         @wraps(f)
-        def decorated(*args, **kwargs):
-            if "usuario" not in session:
-                flash("Debes iniciar sesión ❌", "danger")
+        def decorated_function(*args, **kwargs):
+            usuario = session.get("usuario")
+            ultimo_acceso = session.get("ultimo_acceso")
+
+            # 1️⃣ Validar sesión
+            if not usuario:
+                flash("Debes iniciar sesión primero 🚪", "warning")
                 return redirect(url_for("routes.login"))
-            if rol and session["usuario"]["rol"] != rol:
-                flash("Acceso no autorizado ❌", "danger")
+
+            # 2️⃣ Verificar expiración de la sesión
+            if ultimo_acceso:
+                if datetime.utcnow().timestamp() - ultimo_acceso > SESSION_TIMEOUT:
+                    session.pop("usuario", None)
+                    session.pop("ultimo_acceso", None)
+                    flash("Tu sesión ha expirado por inactividad ⏳", "info")
+                    return redirect(url_for("routes.login"))
+
+            # 🔄 Refrescar tiempo de acceso
+            session["ultimo_acceso"] = datetime.utcnow().timestamp()
+
+            rol_usuario = usuario.get("rol")
+
+            # 3️⃣ Bloquear talleres pendientes
+            if rol_usuario == "pendiente_taller":
+                flash("Tu cuenta de taller está pendiente de aprobación por un administrador 🚫", "warning")
                 return redirect(url_for("routes.login"))
+
+            # 4️⃣ Validar rol único o lista de roles
+            if rol and rol_usuario != rol:
+                flash("No tienes permiso para acceder a esta sección 🚫", "danger")
+                return redirect(url_for("routes.login"))
+
+            if roles and rol_usuario not in roles:
+                flash("No tienes permisos suficientes 🚫", "danger")
+                return redirect(url_for("routes.login"))
+
             return f(*args, **kwargs)
-        return decorated
-    return wrapper
+        return decorated_function
+    return decorator
 
 # --------------------------
 # INICIO
@@ -104,21 +135,22 @@ def login():
 
         if not usuario:
             flash("Correo o contraseña incorrectos ❌", "danger")
+            conn.close()
             return redirect(url_for("routes.login"))
 
         numdocumento = usuario["numdocumento"]
 
-        # Verificar si está bloqueado
-        if usuario['bloqueado']:
-            if usuario['fecha_bloqueo'] and datetime.now() - usuario['fecha_bloqueo'] > timedelta(minutes=TIEMPO_BLOQUEO_MIN):
+        # Bloqueo por intentos fallidos
+        if usuario["bloqueado"]:
+            if usuario["fecha_bloqueo"] and datetime.now() - usuario["fecha_bloqueo"] > timedelta(minutes=TIEMPO_BLOQUEO_MIN):
                 cursor.execute("""
                     UPDATE usuario 
                     SET bloqueado=FALSE, intentos_fallidos=0, fecha_bloqueo=NULL
                     WHERE correoElectronico=%s
                 """, (correo,))
                 conn.commit()
-                usuario['bloqueado'] = False
-                usuario['intentos_fallidos'] = 0
+                usuario["bloqueado"] = False
+                usuario["intentos_fallidos"] = 0
             else:
                 flash("Cuenta bloqueada. Revisa tu correo ❌", "danger")
                 conn.close()
@@ -126,10 +158,10 @@ def login():
 
         # Verificar contraseña
         hash_guardado = usuario["contrasena"]
-        if not bcrypt.checkpw(contrasena_ingresada.encode('utf-8'), hash_guardado.encode('utf-8')):
-            intentos = usuario['intentos_fallidos'] + 1
-            cursor.execute("UPDATE usuario SET intentos_fallidos=%s WHERE correoElectronico=%s", (intentos, correo))
+        if not bcrypt.checkpw(contrasena_ingresada.encode("utf-8"), hash_guardado.encode("utf-8")):
+            intentos = usuario["intentos_fallidos"] + 1
 
+            cursor.execute("UPDATE usuario SET intentos_fallidos=%s WHERE correoElectronico=%s", (intentos, correo))
             cursor.execute("""
                 INSERT INTO intentos_login (numdocumento, correoElectronico, exito) 
                 VALUES (%s, %s, %s)
@@ -140,34 +172,46 @@ def login():
                     UPDATE usuario SET bloqueado=TRUE, fecha_bloqueo=%s 
                     WHERE correoElectronico=%s
                 """, (datetime.now(), correo))
-
+                conn.commit()
                 enviar_correo_bloqueo(correo)
-
                 flash("Cuenta bloqueada tras 3 intentos fallidos. Revisa tu correo ❌", "danger")
             else:
-                flash(f"Correo o contraseña incorrectos. Te quedan {MAX_INTENTOS-intentos} intentos ❌", "danger")
+                conn.commit()
+                flash(f"Correo o contraseña incorrectos. Te quedan {MAX_INTENTOS - intentos} intentos ❌", "danger")
 
-            conn.commit()
             conn.close()
             return redirect(url_for("routes.login"))
 
-        # Contraseña correcta → resetear intentos
+        # Resetear intentos al loguear
         cursor.execute("UPDATE usuario SET intentos_fallidos=0 WHERE correoElectronico=%s", (correo,))
         cursor.execute("""
             INSERT INTO intentos_login (numdocumento, correoElectronico, exito) 
             VALUES (%s, %s, %s)
         """, (numdocumento, correo, True))
         conn.commit()
+
+        # Bloqueo especial talleres pendientes o inactivos
+        if usuario["tipoRol"] == "pendiente_taller":
+            flash("⚠️ Tu cuenta de taller está pendiente de aprobación por un administrador.", "warning")
+            conn.close()
+            return redirect(url_for("routes.login"))
+
+        if usuario["tipoRol"] == "taller" and usuario["activo"] == 0:
+            flash("⚠️ Tu cuenta de taller aún no ha sido aprobada por un administrador.", "warning")
+            conn.close()
+            return redirect(url_for("routes.login"))
+
         conn.close()
 
-        # Guardar sesión + marca de tiempo
+        # Guardar sesión
         session["usuario"] = {
             "numdocumento": usuario["numdocumento"],
             "nombre_usu": usuario["nombre_usu"],
             "correoElectronico": usuario["correoElectronico"],
             "rol": usuario["tipoRol"]
         }
-        session["ultimo_acceso"] = datetime.utcnow().timestamp()  # ⬅️ control de expiración
+        session["ultimo_acceso"] = datetime.utcnow().timestamp()
+
         flash("Inicio de sesión exitoso ✅", "success")
 
         rol = usuario["tipoRol"]
@@ -181,127 +225,13 @@ def login():
     return render_template("login.html")
 
 # --------------------------
-# DECORADOR LOGIN REQUIRED CON EXPIRACIÓN Y VALIDACIÓN DE ROL
-# --------------------------
-from functools import wraps
-from flask import session, redirect, url_for, flash
-from datetime import datetime
-
-SESSION_TIMEOUT = 15 * 60  # 15 minutos en segundos
-
-def login_required(rol=None):
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            usuario = session.get("usuario")
-            ultimo_acceso = session.get("ultimo_acceso")
-
-            if not usuario:
-                flash("Debes iniciar sesión para acceder 🚪", "warning")
-                return redirect(url_for("routes.login"))
-
-            # ⏰ Verificar expiración de la sesión
-            if ultimo_acceso:
-                tiempo_actual = datetime.utcnow().timestamp()
-                if tiempo_actual - ultimo_acceso > SESSION_TIMEOUT:
-                    session.pop("usuario", None)
-                    session.pop("ultimo_acceso", None)
-                    flash("Tu sesión ha expirado por inactividad ⏳", "info")
-                    return redirect(url_for("routes.login"))
-
-            # 🔄 Refrescar último acceso
-            session["ultimo_acceso"] = datetime.utcnow().timestamp()
-
-            # 👤 Validar rol si se especifica
-            if rol and usuario.get("rol") != rol:
-                flash("No tienes permiso para acceder a esta sección 🚫", "danger")
-                return redirect(url_for("routes.login"))
-
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-
-
-# --------------------------
-# ENVIAR CORREO BLOQUEO
-# --------------------------
-def enviar_correo_bloqueo(correo_destino):
-    remitente = "mecanicosfree@gmail.com"
-    password_remitente = "utgqdstkkgsrdbwx"
-    asunto = "Cuenta bloqueada por intentos fallidos"
-
-    serializer = get_serializer()
-    token = serializer.dumps(correo_destino, salt="desbloqueo-cuenta")
-    enlace = url_for("routes.desbloquear", token=token, _external=True)
-
-    mensaje_html = f"""
-    <html>
-        <body>
-            <p>Hola,<br><br>
-            Tu cuenta ha sido bloqueada tras 3 intentos fallidos de inicio de sesión.<br>
-            Por seguridad, espera 15 minutos o desbloquéala con el botón a continuación:<br><br>
-            <a href="{enlace}" style="padding:10px 20px; background-color:#28a745; color:white; text-decoration:none; border-radius:5px;">
-                Desbloquear cuenta
-            </a>
-            <br><br>
-            Atentamente,<br>
-            Equipo Mecánicos Free
-            </p>
-        </body>
-    </html>
-    """
-
-    msg = MIMEText(mensaje_html, "html", "utf-8")
-    msg['Subject'] = asunto
-    msg['From'] = remitente
-    msg['To'] = correo_destino
-
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(remitente, password_remitente)
-            server.sendmail(remitente, correo_destino, msg.as_string())
-        print(f"📧 Correo de bloqueo enviado a {correo_destino}")
-    except Exception as e:
-        print(f"❌ Error al enviar correo a {correo_destino}: {e}")
-
-# --------------------------
-# RUTA PARA DESBLOQUEAR
-# --------------------------
-@routes.route("/desbloquear/<token>")
-def desbloquear(token):
-    serializer = get_serializer()
-    try:
-        correo = serializer.loads(token, salt="desbloqueo-cuenta", max_age=1800)
-    except SignatureExpired:
-        flash("⚠️ El enlace ha expirado. Solicita uno nuevo.", "danger")
-        return redirect(url_for("routes.login"))
-    except BadSignature:
-        flash("❌ Enlace inválido o manipulado.", "danger")
-        return redirect(url_for("routes.login"))
-
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE usuario
-        SET bloqueado=FALSE, intentos_fallidos=0, fecha_bloqueo=NULL
-        WHERE correoElectronico=%s
-    """, (correo,))
-    conn.commit()
-    conn.close()
-
-    flash("✅ Tu cuenta ha sido desbloqueada correctamente. Ya puedes iniciar sesión.", "success")
-    return redirect(url_for("routes.login"))
-
-
-    
-# --------------------------
-# LOGOUT UNIFICADO
+# LOGOUT
 # --------------------------
 @routes.route("/logout")
 def logout():
     session.pop("usuario", None)
     flash("Sesión cerrada ✅", "info")
-    return redirect(url_for("routes.login"))    
+    return redirect(url_for("routes.login"))
 
 # --------------------------
 # PERFIL TALLER
@@ -349,6 +279,121 @@ def admin_dashboard():
         total_productos=total_productos,
         total_servicios=total_servicios
     )
+
+# --------------------------
+# FUNCIONES DE CORREO
+# --------------------------
+def enviar_correo_bloqueo(destinatario):
+    """Envía correo con enlace para desbloquear cuenta"""
+    try:
+        token = get_serializer().dumps(destinatario, salt="bloqueo-cuenta")
+        enlace = url_for("routes.desbloquear", token=token, _external=True)
+
+        mensaje = MIMEText(f"""
+        Hola 👋, detectamos múltiples intentos fallidos en tu cuenta.
+
+        Para desbloquearla, haz clic en el siguiente enlace:
+        {enlace}
+
+        Si no solicitaste esto, ignora el mensaje.
+        """, "plain", "utf-8")
+
+        mensaje["Subject"] = "Desbloqueo de cuenta - Mecánicos Free"
+        mensaje["From"] = "tu_correo@ejemplo.com"
+        mensaje["To"] = destinatario
+
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login("tu_correo@ejemplo.com", "tu_password_app")
+            server.sendmail("tu_correo@ejemplo.com", destinatario, mensaje.as_string())
+
+    except Exception as e:
+        print("❌ Error enviando correo:", e)
+
+
+def enviar_correo_completar_taller(destinatario):
+    """Envía correo para que un taller complete su perfil tras ser aprobado"""
+    try:
+        token = get_serializer().dumps(destinatario, salt="completar-taller")
+        enlace = url_for("routes.completar_registro_taller", token=token, _external=True)
+
+        mensaje = MIMEText(f"""
+        Hola 👋, tu taller ha sido aprobado ✅
+
+        Completa tu perfil ingresando al siguiente enlace:
+        {enlace}
+
+        Bienvenido a Mecánicos Free 🚗🔧
+        """, "plain", "utf-8")
+
+        mensaje["Subject"] = "Completa tu registro - Mecánicos Free"
+        mensaje["From"] = "tu_correo@ejemplo.com"
+        mensaje["To"] = destinatario
+
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login("tu_correo@ejemplo.com", "tu_password_app")
+            server.sendmail("tu_correo@ejemplo.com", destinatario, mensaje.as_string())
+
+    except Exception as e:
+        print("❌ Error enviando correo:", e)
+
+
+# --------------------------
+# RUTA: DESBLOQUEAR CUENTA
+# --------------------------
+@routes.route("/desbloquear/<token>")
+def desbloquear(token):
+    try:
+        correo = get_serializer().loads(token, salt="bloqueo-cuenta", max_age=900)  # 15 min
+    except (SignatureExpired, BadSignature):
+        flash("El enlace de desbloqueo ha expirado o es inválido ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    conn = conectar_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE usuario
+        SET bloqueado=FALSE, intentos_fallidos=0, fecha_bloqueo=NULL
+        WHERE correoElectronico=%s
+    """, (correo,))
+    conn.commit()
+    conn.close()
+
+    flash("Cuenta desbloqueada ✅, ahora puedes iniciar sesión.", "success")
+    return redirect(url_for("routes.login"))
+
+
+# --------------------------
+# RUTA: COMPLETAR REGISTRO DE TALLER
+# --------------------------
+@routes.route("/completar_registro_taller/<token>", methods=["GET", "POST"])
+def completar_registro_taller(token):
+    try:
+        correo = get_serializer().loads(token, salt="completar-taller", max_age=86400)  # 24h
+    except (SignatureExpired, BadSignature):
+        flash("El enlace para completar el registro ha expirado o es inválido ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    if request.method == "POST":
+        nombre_taller = request.form.get("nombre_taller")
+        direccion = request.form.get("direccion")
+        telefono = request.form.get("telefono")
+
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE usuario
+            SET nombre_usu=%s, direccion=%s, telefono=%s, activo=1
+            WHERE correoElectronico=%s
+        """, (nombre_taller, direccion, telefono, correo))
+        conn.commit()
+        conn.close()
+
+        flash("Registro de taller completado ✅, ahora puedes iniciar sesión.", "success")
+        return redirect(url_for("routes.login"))
+
+    return render_template("completar_taller.html", correo=correo)
 
 # --------------------------
 # AGREGAR VEHÍCULO (CLIENTE)
@@ -421,15 +466,20 @@ def registrar_usuario():
             conn.close()
             return redirect(url_for("routes.registrar_usuario"))
 
-        # 6️⃣ Insertar usuario en la tabla 'usuario'
+        # 6️⃣ Ajustar activo según rol
+        if rol == "taller":
+            activo = 0  # pendiente de aprobación
+            rol_db = "taller"
+        else:
+            activo = 1  # clientes activos automáticamente
+            rol_db = "cliente"
+
+        # 7️⃣ Insertar usuario en la tabla 'usuario'
         cursor.execute(
-            "INSERT INTO usuario (numdocumento, nombre_usu, correoElectronico, contrasena) VALUES (%s, %s, %s, %s)",
-            (numdocumento, nombre_usu, correoElectronico, hashed.decode('utf-8'))
+            "INSERT INTO usuario (numdocumento, nombre_usu, correoElectronico, contrasena, activo) VALUES (%s, %s, %s, %s, %s)",
+            (numdocumento, nombre_usu, correoElectronico, hashed.decode('utf-8'), activo)
         )
         conn.commit()
-
-        # 7️⃣ Ajustar rol según la selección
-        rol_db = "pendiente_taller" if rol == "taller" else "cliente"
 
         # 8️⃣ Insertar rol en la tabla 'rol'
         cursor.execute(
@@ -439,10 +489,16 @@ def registrar_usuario():
         conn.commit()
         conn.close()
 
-        flash("Usuario registrado con éxito ✅", "success")
+        # 9️⃣ Si es taller → enviar correo de aviso
+        if rol == "taller":
+            enviar_correo_taller(correoElectronico, nombre_usu)
+            flash("Tu cuenta de taller fue registrada. Espera aprobación del administrador ✅", "info")
+        else:
+            flash("Usuario registrado con éxito ✅", "success")
+
         return redirect(url_for("routes.login"))
 
-    # Si es GET, mostrar el formulario
+    # 🔟 Si es GET → mostrar formulario
     return render_template("registrar_usuario.html")
 
 # --------------------------
