@@ -112,9 +112,6 @@ def catalogo():
 # --------------------------
 # LOGIN
 # --------------------------
-TIEMPO_BLOQUEO_MIN = 15
-MAX_INTENTOS = 3
-
 @routes.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -140,7 +137,7 @@ def login():
 
         numdocumento = usuario["numdocumento"]
 
-        # Bloqueo por intentos fallidos
+        # 🔒 Bloqueo por intentos fallidos
         if usuario["bloqueado"]:
             if usuario["fecha_bloqueo"] and datetime.now() - usuario["fecha_bloqueo"] > timedelta(minutes=TIEMPO_BLOQUEO_MIN):
                 cursor.execute("""
@@ -156,11 +153,10 @@ def login():
                 conn.close()
                 return redirect(url_for("routes.login"))
 
-        # Verificar contraseña
+        # 🔑 Verificar contraseña
         hash_guardado = usuario["contrasena"]
         if not bcrypt.checkpw(contrasena_ingresada.encode("utf-8"), hash_guardado.encode("utf-8")):
             intentos = usuario["intentos_fallidos"] + 1
-
             cursor.execute("UPDATE usuario SET intentos_fallidos=%s WHERE correoElectronico=%s", (intentos, correo))
             cursor.execute("""
                 INSERT INTO intentos_login (numdocumento, correoElectronico, exito) 
@@ -174,7 +170,7 @@ def login():
                 """, (datetime.now(), correo))
                 conn.commit()
                 enviar_correo_bloqueo(correo)
-                flash("Cuenta bloqueada tras 3 intentos fallidos. Revisa tu correo ❌", "danger")
+                flash("Cuenta bloqueada tras 3 intentos fallidos ❌", "danger")
             else:
                 conn.commit()
                 flash(f"Correo o contraseña incorrectos. Te quedan {MAX_INTENTOS - intentos} intentos ❌", "danger")
@@ -182,7 +178,7 @@ def login():
             conn.close()
             return redirect(url_for("routes.login"))
 
-        # Resetear intentos al loguear
+        # ✅ Resetear intentos al loguear
         cursor.execute("UPDATE usuario SET intentos_fallidos=0 WHERE correoElectronico=%s", (correo,))
         cursor.execute("""
             INSERT INTO intentos_login (numdocumento, correoElectronico, exito) 
@@ -190,12 +186,13 @@ def login():
         """, (numdocumento, correo, True))
         conn.commit()
 
-        # Bloqueo especial talleres pendientes o inactivos
+        # 🚫 Bloqueo especial talleres pendientes
         if usuario["tipoRol"] == "pendiente_taller":
-            flash("⚠️ Tu cuenta de taller está pendiente de aprobación por un administrador.", "warning")
+            flash("⚠️ Tu cuenta de taller está pendiente de aprobación.", "warning")
             conn.close()
             return redirect(url_for("routes.login"))
 
+        # 🚫 Taller inactivo
         if usuario["tipoRol"] == "taller" and usuario["activo"] == 0:
             flash("⚠️ Tu cuenta de taller aún no ha sido aprobada por un administrador.", "warning")
             conn.close()
@@ -203,7 +200,7 @@ def login():
 
         conn.close()
 
-        # Guardar sesión
+        # Guardar sesión (incluyendo pendiente_cliente)
         session["usuario"] = {
             "numdocumento": usuario["numdocumento"],
             "nombre_usu": usuario["nombre_usu"],
@@ -219,10 +216,13 @@ def login():
             return redirect(url_for("routes.admin_dashboard"))
         elif rol == "taller":
             return redirect(url_for("routes.perfil_taller"))
-        else:
+        else:  # cliente o pendiente_cliente
             return redirect(url_for("routes.perfil_cliente"))
 
     return render_template("login.html")
+
+
+
 
 # --------------------------
 # LOGOUT
@@ -240,6 +240,44 @@ def logout():
 @login_required(rol="taller")
 def perfil_taller():
     return render_template("perfil_taller.html", usuario=session["usuario"])
+
+# --------------------------
+# AGREGAR VEHÍCULO (CLIENTE)
+# --------------------------
+@routes.route("/agregar_vehiculo", methods=["GET", "POST"])
+def agregar_vehiculo():
+    if "usuario" not in session or session["usuario"].get("rol") not in ["cliente", "pendiente_cliente"]:
+        flash("Acceso no autorizado ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    if request.method == "POST":
+        tipo_vehiculo = request.form["tipo_vehiculo"]
+        modelo_vehiculo = request.form["modelo_vehiculo"]
+
+        conn = conectar_db()
+        cursor = conn.cursor()
+
+        # 🚗 Insertar vehículo
+        cursor.execute("""
+            INSERT INTO vehiculos (tipo_vehiculo, modelo_vehiculo, id_usucliente)
+            VALUES (%s, %s, %s)
+        """, (tipo_vehiculo, modelo_vehiculo, session["usuario"]["numdocumento"]))
+
+        # 🔄 Si el cliente estaba "pendiente", actualizar rol a "cliente"
+        if session["usuario"]["rol"] == "pendiente_cliente":
+            cursor.execute("""
+                UPDATE rol SET tipoRol='cliente' WHERE numdocumento=%s
+            """, (session["usuario"]["numdocumento"],))
+            session["usuario"]["rol"] = "cliente"  # actualizar sesión
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        flash("Vehículo registrado correctamente ✅", "success")
+        return redirect(url_for("routes.perfil_cliente"))
+
+    return render_template("agregar_vehiculo.html")
 
 # --------------------------
 # PERFIL CLIENTE
@@ -394,34 +432,6 @@ def completar_registro_taller(token):
         return redirect(url_for("routes.login"))
 
     return render_template("completar_taller.html", correo=correo)
-
-# --------------------------
-# AGREGAR VEHÍCULO (CLIENTE)
-# --------------------------
-@routes.route("/agregar_vehiculo", methods=["GET", "POST"])
-def agregar_vehiculo():
-    if "usuario" not in session or session["usuario"].get("rol") != "cliente":
-        flash("Acceso no autorizado ❌", "danger")
-        return redirect(url_for("routes.login"))
-
-    if request.method == "POST":
-        tipo_vehiculo = request.form["tipo_vehiculo"]
-        modelo_vehiculo = request.form["modelo_vehiculo"]
-
-        conn = conectar_db()
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO vehiculos (tipo_vehiculo, modelo_vehiculo, id_usucliente)
-            VALUES (%s, %s, %s)
-        """, (tipo_vehiculo, modelo_vehiculo, session["usuario"]["numdocumento"]))
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        flash("Vehículo registrado correctamente ✅", "success")
-        return redirect(url_for("routes.perfil_cliente"))
-
-    return render_template("agregar_vehiculo.html")
 
 
 # --------------------------
