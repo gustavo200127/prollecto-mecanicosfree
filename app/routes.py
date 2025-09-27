@@ -318,120 +318,159 @@ def admin_dashboard():
         total_servicios=total_servicios
     )
 
+import smtplib
+from email.mime.text import MIMEText
+from itsdangerous import URLSafeTimedSerializer
+from flask import url_for, current_app
+
+# --------------------------
+# CONFIGURACIÓN DE CORREO
+# --------------------------
+EMAIL_REMITENTE = "mecanicosfree@gmail.com"
+EMAIL_PASSWORD = "utgq dstk kgsr dbwx"  # ⚠️ clave de aplicación Gmail
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+
+# Clave secreta para tokens seguros
+SECRET_KEY = "clave_secreta_super_segura"
+
+
+def get_serializer():
+    """Genera un serializador seguro para los tokens"""
+    return URLSafeTimedSerializer(SECRET_KEY)
+
+
+def enviar_correo(destinatario, asunto, cuerpo):
+    """Función genérica para enviar correos"""
+    try:
+        mensaje = MIMEText(cuerpo, "plain", "utf-8")
+        mensaje["Subject"] = asunto
+        mensaje["From"] = EMAIL_REMITENTE
+        mensaje["To"] = destinatario
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(EMAIL_REMITENTE, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_REMITENTE, destinatario, mensaje.as_string())
+        print(f"✅ Correo enviado a {destinatario}")
+    except Exception as e:
+        print("❌ Error enviando correo:", e)
+
+
 # --------------------------
 # FUNCIONES DE CORREO
 # --------------------------
 def enviar_correo_bloqueo(destinatario):
-    """Envía correo con enlace para desbloquear cuenta"""
-    try:
-        token = get_serializer().dumps(destinatario, salt="bloqueo-cuenta")
+    """Correo con enlace para desbloquear cuenta"""
+    token = get_serializer().dumps(destinatario, salt="bloqueo-cuenta")
+
+    # 🔹 url_for requiere un contexto de app para _external=True
+    with current_app.app_context():
         enlace = url_for("routes.desbloquear", token=token, _external=True)
 
-        mensaje = MIMEText(f"""
-        Hola 👋, detectamos múltiples intentos fallidos en tu cuenta.
+    cuerpo = f"""
+    Hola 👋, detectamos múltiples intentos fallidos en tu cuenta.
 
-        Para desbloquearla, haz clic en el siguiente enlace:
-        {enlace}
+    Para desbloquearla, haz clic en el siguiente enlace:
+    {enlace}
 
-        Si no solicitaste esto, ignora el mensaje.
-        """, "plain", "utf-8")
+    Este enlace es válido por 15 minutos.
 
-        mensaje["Subject"] = "Desbloqueo de cuenta - Mecánicos Free"
-        mensaje["From"] = "tu_correo@ejemplo.com"
-        mensaje["To"] = destinatario
+    Si no solicitaste esto, ignora el mensaje.
+    """
 
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login("tu_correo@ejemplo.com", "tu_password_app")
-            server.sendmail("tu_correo@ejemplo.com", destinatario, mensaje.as_string())
-
-    except Exception as e:
-        print("❌ Error enviando correo:", e)
+    enviar_correo(destinatario, "Desbloqueo de cuenta - Mecánicos Free", cuerpo)
 
 
-def enviar_correo_completar_taller(destinatario):
-    """Envía correo para que un taller complete su perfil tras ser aprobado"""
-    try:
-        token = get_serializer().dumps(destinatario, salt="completar-taller")
+def enviar_correo_taller_completar_datos(destinatario):
+    """Correo al taller recién registrado para completar su información"""
+    token = get_serializer().dumps(destinatario, salt="completar-taller")
+
+    with current_app.app_context():
         enlace = url_for("routes.completar_registro_taller", token=token, _external=True)
 
-        mensaje = MIMEText(f"""
-        Hola 👋, tu taller ha sido aprobado ✅
+    cuerpo = f"""
+    Hola 👋,
 
-        Completa tu perfil ingresando al siguiente enlace:
-        {enlace}
+    Gracias por registrarte como TALLER en Mecánicos Free 🚗🔧
 
-        Bienvenido a Mecánicos Free 🚗🔧
-        """, "plain", "utf-8")
+    Para completar tu registro necesitamos algunos datos adicionales. 
+    Haz clic en el siguiente enlace para completar tu información:
 
-        mensaje["Subject"] = "Completa tu registro - Mecánicos Free"
-        mensaje["From"] = "tu_correo@ejemplo.com"
-        mensaje["To"] = destinatario
+    {enlace}
 
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login("tu_correo@ejemplo.com", "tu_password_app")
-            server.sendmail("tu_correo@ejemplo.com", destinatario, mensaje.as_string())
+    Este enlace es válido por 24 horas.
 
-    except Exception as e:
-        print("❌ Error enviando correo:", e)
+    Una vez completes los datos, un administrador revisará tu solicitud ✅
+    """
+
+    enviar_correo(destinatario, "Completa tu registro de taller - Mecánicos Free", cuerpo)
 
 
-# --------------------------
-# RUTA: DESBLOQUEAR CUENTA
-# --------------------------
-@routes.route("/desbloquear/<token>")
-def desbloquear(token):
-    try:
-        correo = get_serializer().loads(token, salt="bloqueo-cuenta", max_age=900)  # 15 min
-    except (SignatureExpired, BadSignature):
-        flash("El enlace de desbloqueo ha expirado o es inválido ❌", "danger")
-        return redirect(url_for("routes.login"))
+def enviar_correo_taller_aprobado(destinatario):
+    """Correo cuando un taller es aprobado manualmente por admin"""
+    cuerpo = f"""
+    Hola 👋,
 
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE usuario
-        SET bloqueado=FALSE, intentos_fallidos=0, fecha_bloqueo=NULL
-        WHERE correoElectronico=%s
-    """, (correo,))
-    conn.commit()
-    conn.close()
+    Tu taller ha sido APROBADO ✅
 
-    flash("Cuenta desbloqueada ✅, ahora puedes iniciar sesión.", "success")
-    return redirect(url_for("routes.login"))
+    Ya puedes iniciar sesión y comenzar a usar todas las funciones de Mecánicos Free 🚗🔧
 
+    Bienvenido a nuestra comunidad.
+    """
+
+    enviar_correo(destinatario, "Tu taller ha sido aprobado - Mecánicos Free", cuerpo)
+
+
+def enviar_correo_cliente_activo(destinatario):
+    """Correo cuando un cliente pasa de pendiente a activo al registrar vehículo"""
+    cuerpo = f"""
+    ¡Hola 👋!
+
+    Tu cuenta ahora está activa como CLIENTE ✅
+
+    Ya puedes registrar vehículos y acceder a todas las funciones de Mecánicos Free 🚗
+    """
+
+    enviar_correo(destinatario, "Tu cuenta de cliente está activa - Mecánicos Free", cuerpo)
 
 # --------------------------
-# RUTA: COMPLETAR REGISTRO DE TALLER
+# COMPLETAR REGISTRO DE TALLER
 # --------------------------
 @routes.route("/completar_registro_taller/<token>", methods=["GET", "POST"])
 def completar_registro_taller(token):
     try:
         correo = get_serializer().loads(token, salt="completar-taller", max_age=86400)  # 24h
-    except (SignatureExpired, BadSignature):
-        flash("El enlace para completar el registro ha expirado o es inválido ❌", "danger")
+    except SignatureExpired:
+        flash("El enlace ha expirado ❌", "danger")
+        return redirect(url_for("routes.login"))
+    except BadSignature:
+        flash("Enlace inválido ❌", "danger")
         return redirect(url_for("routes.login"))
 
     if request.method == "POST":
-        nombre_taller = request.form.get("nombre_taller")
-        direccion = request.form.get("direccion")
-        telefono = request.form.get("telefono")
+        telefono = request.form["telefono"]
+        direccion = request.form["direccion"]
+        nit = request.form["nit"]
 
         conn = conectar_db()
         cursor = conn.cursor()
+
+        # Actualizar datos del taller
         cursor.execute("""
-            UPDATE usuario
-            SET nombre_usu=%s, direccion=%s, telefono=%s, activo=1
+            UPDATE usuario 
+            SET telefono=%s, direccion=%s, nit=%s 
             WHERE correoElectronico=%s
-        """, (nombre_taller, direccion, telefono, correo))
+        """, (telefono, direccion, nit, correo))
         conn.commit()
         conn.close()
 
-        flash("Registro de taller completado ✅, ahora puedes iniciar sesión.", "success")
+        flash("Datos enviados. Un administrador revisará tu solicitud ✅", "success")
         return redirect(url_for("routes.login"))
 
-    return render_template("completar_taller.html", correo=correo)
+    # Si es GET → mostrar formulario para completar datos
+    return render_template("completar_registro_taller.html", correo=correo)
+
 
 
 # --------------------------
@@ -499,10 +538,10 @@ def registrar_usuario():
         conn.commit()
         conn.close()
 
-        # 9️⃣ Si es taller → enviar correo de aviso
+        # 9️⃣ Si es taller → enviar correo para completar datos
         if rol == "taller":
-            enviar_correo_taller(correoElectronico, nombre_usu)
-            flash("Tu cuenta de taller fue registrada. Espera aprobación del administrador ✅", "info")
+            enviar_correo_taller_completar_datos(correoElectronico)
+            flash("Tu cuenta de taller fue registrada. Revisa tu correo para completar los datos ✅", "info")
         else:
             flash("Usuario registrado con éxito ✅", "success")
 
