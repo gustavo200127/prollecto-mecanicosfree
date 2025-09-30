@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mecánicos Free</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>{% block title %}Mecánicos Free{% endblock %}</title>
+    <!-- Bootstrap 5 desde CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body>
+<body class="d-flex flex-column min-vh-100">
     <!-- Barra de navegación -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-success">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('routes.inicio') }}">Mecánicos Free</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
+            <a class="navbar-brand fw-bold" href="{{ url_for('routes.inicio') }}">Mecánicos Free</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
                     aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -27,10 +28,10 @@
                     {% if session.get('usuario') %}
                         {% if session['usuario']['rol'] == 'taller' %}
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.perfil_taller') }}">Perfil Taller</a></li>
+                        {% elif session['usuario']['rol'] == 'cliente' %}
+                            <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.perfil_cliente') }}">Perfil Cliente</a></li>
                         {% elif session['usuario']['rol'] == 'admin' %}
                             <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.admin_dashboard') }}">Panel Admin</a></li>
-                        {% elif session['usuario']['rol'] == 'cliente' %}
-                            <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.perfil_cliente') }}">Mi Perfil</a></li>
                         {% endif %}
                         <li class="nav-item"><a class="nav-link" href="{{ url_for('routes.logout') }}">Cerrar Sesión</a></li>
                     {% else %}
@@ -39,37 +40,31 @@
                     {% endif %}
                 </ul>
 
-                <!-- 🔎 Barra de búsqueda integrada en la navbar -->
+                <!-- 🔎 Barra de búsqueda -->
                 <form action="{{ url_for('routes.buscar') }}" method="GET" class="d-flex">
-                    <input class="form-control me-2" 
-                           type="search" 
-                           name="q" 
-                           placeholder="Buscar productos o talleres..." 
+                    <input class="form-control me-2"
+                           type="search"
+                           name="q"
+                           placeholder="Buscar productos o talleres..."
                            aria-label="Buscar en Mecánicos Free"
                            required>
-                    <button class="btn btn-outline-success" type="submit">Buscar</button>
+                    <button class="btn btn-light" type="submit">Buscar</button>
                 </form>
             </div>
         </div>
     </nav>
 
     <!-- Contenido dinámico -->
-    <div class="container mt-4">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
+    <main class="flex-fill container my-4">
         {% block content %}{% endblock %}
-    </div>
+    </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Footer fijo abajo -->
+    <footer class="bg-dark text-white text-center py-3 mt-auto">
+        <p class="mb-0">&copy; 2025 Mecánicos Free - Todos los derechos reservados</p>
+    </footer>
+
+    <!-- JS Bootstrap -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-

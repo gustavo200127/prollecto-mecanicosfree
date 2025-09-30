@@ -1,0 +1,53 @@
+{% extends "layout.html" %}
+
+{% block title %}Producto Premium - Mecánicos Free{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="card shadow-lg border-success">
+        <div class="row g-0">
+            <!-- Imagen -->
+            <div class="col-md-6">
+                {% if nombre == 'aceites' %}
+                    <img src="{{ url_for('static', filename='img/aceites.jpg') }}" class="img-fluid rounded-start" alt="Aceites premium">
+                {% elif nombre == 'herramientas' %}
+                    <img src="{{ url_for('static', filename='img/herramientas.jpg') }}" class="img-fluid rounded-start" alt="Herramientas premium">
+                {% elif nombre == 'maquina' %}
+                    <img src="{{ url_for('static', filename='img/maquina.jpg') }}" class="img-fluid rounded-start" alt="Máquina premium">
+                {% endif %}
+            </div>
+
+            <!-- Info -->
+            <div class="col-md-6 d-flex flex-column justify-content-center p-4">
+                <h2 class="fw-bold text-success">
+                    {% if nombre == 'aceites' %}
+                        Aceites Premium <span class="text-warning">👑</span>
+                    {% elif nombre == 'herramientas' %}
+                        Kit de Herramientas Premium <span class="text-warning">👑</span>
+                    {% elif nombre == 'maquina' %}
+                        Máquina de Llantas Premium <span class="text-warning">👑</span>
+                    {% endif %}
+                </h2>
+                <p class="lead">
+                    {% if nombre == 'aceites' %}
+                        Lubricantes diseñados para motores de alto desempeño, garantizando durabilidad y máxima protección.
+                    {% elif nombre == 'herramientas' %}
+                        Kit profesional con herramientas de alta calidad para talleres exigentes.
+                    {% elif nombre == 'maquina' %}
+                        Tecnología avanzada para el mantenimiento y servicio de llantas, ideal para talleres premium.
+                    {% endif %}
+                </p>
+                <ul>
+                    <li>Garantía extendida</li>
+                    <li>Soporte técnico exclusivo</li>
+                    <li>Entrega rápida</li>
+                </ul>
+                <div class="mt-3">
+                    <a href="{{ url_for('routes.catalogo') }}" class="btn btn-outline-success">⬅ Volver al catálogo</a>
+                    <a href="#" class="btn btn-success">Adquirir producto</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -2,105 +2,89 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4 text-center">Catálogo de Talleres</h2>
+    <h2 class="mb-4 text-center fw-bold">✨ Catálogo de Talleres</h2>
 
     <!-- Servicios -->
-    <h3 class="mb-3">🔧 Servicios</h3>
-    <table class="table table-bordered table-striped">
-        <thead class="table-dark">
-            <tr>
-                <th>Taller</th>
-                <th>Servicio</th>
-                <th>Precio</th>
-                <th>Disponibilidad</th>
-                <th>Acción</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for s in servicios %}
-            <tr>
-                <td>{{ s.taller }}</td>
-                <td>{{ s.tipo_servicio }}</td>
-                <td>${{ s.precio }}</td>
-                <td>
-                    {% if s.disponibilidad == 1 %}
-                        <span class="badge bg-success">Disponible</span>
-                    {% else %}
-                        <span class="badge bg-danger">No disponible</span>
-                    {% endif %}
-                </td>
-                <td>
+    <h3 class="mb-4">🔧 Servicios</h3>
+    <div class="row g-4">
+        {% for s in servicios %}
+        <div class="col-md-4">
+            <div class="card shadow-lg h-100 border-0">
+                <img src="{{ url_for('static', filename=s.imagen) if s.imagen else url_for('static', filename='img/servicio_default.jpg') }}" 
+                     class="card-img-top" alt="Servicio">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold">{{ s.tipo_servicio }}</h5>
+                    <p class="card-text text-muted mb-1">Taller: <strong>{{ s.taller }}</strong></p>
+                    <p class="card-text mb-1">💲 <strong>${{ s.precio }}</strong></p>
+                    <p>
+                        {% if s.disponibilidad == 1 %}
+                            <span class="badge bg-success">Disponible</span>
+                        {% else %}
+                            <span class="badge bg-danger">No disponible</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="card-footer bg-transparent border-0 text-center">
                     {% if s.disponibilidad == 1 and session.get("usuario") and session["usuario"]["rol"] in ["cliente", "taller"] %}
                         <form action="{{ url_for('routes.carrito_agregar_servicio', id_servicio=s.id_servicio) }}" method="post">
-                            <button type="submit" class="btn btn-primary btn-sm">🛒 Añadir</button>
+                            <button type="submit" class="btn btn-primary w-100">🛒 Añadir</button>
                         </form>
                     {% else %}
-                        <span class="text-muted">Solo clientes/talleres</span>
+                        <small class="text-muted">Solo clientes/talleres</small>
                     {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="5" class="text-center text-muted">No hay servicios disponibles</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-center text-muted">No hay servicios disponibles</p>
+        {% endfor %}
+    </div>
 
     <!-- Productos -->
-    <h3 class="mt-5 mb-3">🛠️ Productos</h3>
-    <table class="table table-bordered table-striped">
-        <thead class="table-dark">
-            <tr>
-                <th>Taller</th>
-                <th>Producto</th>
-                <th>Marca</th>
-                <th>Precio</th>
-                <th>Stock</th>
-                <th>Acción</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for p in productos %}
-            <tr>
-                <td>{{ p.taller }}</td>
-                <td>{{ p.tipo_producto }}</td>
-                <td>{{ p.marca_producto }}</td>
-                <td>${{ p.precio_producto }}</td>
-                <td>
-                    {% if p.stock_producto > 0 %}
-                        {{ p.stock_producto }}
-                    {% else %}
-                        <span class="text-danger">Agotado</span>
-                    {% endif %}
-                </td>
-                <td>
+    <h3 class="mt-5 mb-4">🛠️ Productos</h3>
+    <div class="row g-4">
+        {% for p in productos %}
+        <div class="col-md-4">
+            <div class="card shadow-lg h-100 border-0">
+                <img src="{{ url_for('static', filename=p.imagen) if p.imagen else url_for('static', filename='img/producto_default.jpg') }}" 
+                     class="card-img-top" alt="Producto">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold">{{ p.tipo_producto }}</h5>
+                    <p class="card-text text-muted mb-1">Marca: <strong>{{ p.marca_producto }}</strong></p>
+                    <p class="card-text mb-1">💲 <strong>${{ p.precio_producto }}</strong></p>
+                    <p>
+                        {% if p.stock_producto > 0 %}
+                            <span class="badge bg-success">Stock: {{ p.stock_producto }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">Agotado</span>
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="card-footer bg-transparent border-0 text-center">
                     {% if p.stock_producto > 0 %}
                         {% if session.get("usuario") and session["usuario"]["rol"] in ["cliente", "taller"] %}
                             <form action="{{ url_for('routes.carrito_agregar', id_producto=p.id_producto) }}" method="post" class="d-flex">
                                 <input type="number" name="cantidad" value="1" min="1" max="{{ p.stock_producto }}" 
                                        class="form-control me-2" style="width: 80px;">
-                                <button type="submit" class="btn btn-success btn-sm">🛒 Añadir</button>
+                                <button type="submit" class="btn btn-success flex-fill">🛒 Añadir</button>
                             </form>
                         {% else %}
-                            <span class="text-muted">Solo clientes/talleres</span>
+                            <small class="text-muted">Solo clientes/talleres</small>
                         {% endif %}
                     {% else %}
-                        <span class="text-muted">No disponible</span>
+                        <small class="text-muted">No disponible</small>
                     {% endif %}
-                </td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="6" class="text-center text-muted">No hay productos publicados</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-center text-muted">No hay productos publicados</p>
+        {% endfor %}
+    </div>
 
     <!-- Botón para ver carrito -->
-    <div class="mt-3 text-end">
-        <a href="{{ url_for('routes.carrito_ver') }}" class="btn btn-primary">Ver Carrito 🛒</a>
+    <div class="mt-5 text-center">
+        <a href="{{ url_for('routes.carrito_ver') }}" class="btn btn-lg btn-primary shadow">Ver Carrito 🛒</a>
     </div>
 </div>
 {% endblock %}

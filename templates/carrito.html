@@ -2,48 +2,49 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h2 class="mb-4 text-center">🛒 Mi Carrito</h2>
+    <h2 class="mb-4 text-center fw-bold">🛒 Mi Carrito</h2>
 
     {% if carrito %}
-    <table class="table table-bordered table-striped">
-        <thead class="table-dark">
-            <tr>
-                <th>Tipo</th>
-                <th>Nombre</th>
-                <th>Precio Unitario</th>
-                <th>Cantidad</th>
-                <th>Subtotal</th>
-                <th>Acción</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in carrito %}
-            <tr>
-                <td>
+    <div class="row g-4">
+        {% for item in carrito %}
+        <div class="col-md-4">
+            <div class="card shadow-lg h-100 border-0">
+                <!-- Imagen según tipo -->
+                {% if item.tipo == "producto" %}
+                    <img src="{{ item.imagen or url_for('static', filename='img/producto_default.jpg') }}" 
+                         class="card-img-top" alt="Producto">
+                {% else %}
+                    <img src="{{ item.imagen or url_for('static', filename='img/servicio_default.jpg') }}" 
+                         class="card-img-top" alt="Servicio">
+                {% endif %}
+
+                <div class="card-body">
+                    <!-- Badge según tipo -->
                     {% if item.tipo == "producto" %}
-                        <span class="badge bg-success">Producto</span>
+                        <span class="badge bg-success mb-2">Producto</span>
                     {% elif item.tipo == "servicio" %}
-                        <span class="badge bg-primary">Servicio</span>
+                        <span class="badge bg-primary mb-2">Servicio</span>
                     {% endif %}
-                </td>
-                <td>{{ item.nombre }}</td>
-                <td>${{ "%.2f"|format(item.precio) }}</td>
-                <td>{{ item.cantidad }}</td>
-                <td>${{ "%.2f"|format(item.precio * item.cantidad) }}</td>
-                <td>
+
+                    <h5 class="card-title fw-bold">{{ item.nombre }}</h5>
+                    <p class="card-text mb-1">💲 Precio Unitario: <strong>${{ "%.2f"|format(item.precio) }}</strong></p>
+                    <p class="card-text mb-1">📦 Cantidad: <strong>{{ item.cantidad }}</strong></p>
+                    <p class="card-text">💰 Subtotal: <strong>${{ "%.2f"|format(item.precio * item.cantidad) }}</strong></p>
+                </div>
+
+                <div class="card-footer bg-transparent border-0 text-center">
                     <a href="{{ url_for('routes.carrito_eliminar', tipo=item.tipo, id_item=item.id_producto if item.tipo == 'producto' else item.id_servicio) }}" 
-                       class="btn btn-danger btn-sm">❌ Eliminar</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                       class="btn btn-danger w-100">❌ Eliminar</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
 
     <!-- Total -->
-    <div class="text-end mt-3">
-        <h4>Total: ${{ "%.2f"|format(total) }}</h4>
-        <!-- Cambiado el endpoint a carrito_finalizar -->
-        <a href="{{ url_for('routes.carrito_finalizar') }}" class="btn btn-success btn-lg">✅ Finalizar Compra</a>
+    <div class="text-end mt-4">
+        <h4 class="fw-bold">Total: ${{ "%.2f"|format(total) }}</h4>
+        <a href="{{ url_for('routes.carrito_finalizar') }}" class="btn btn-success btn-lg shadow">✅ Finalizar Compra</a>
     </div>
 
     {% else %}

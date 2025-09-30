@@ -7,6 +7,8 @@ from datetime import datetime, timedelta
 import smtplib
 from email.mime.text import MIMEText
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from config import Config
+
 
 routes = Blueprint("routes", __name__)
 
@@ -112,6 +114,8 @@ def catalogo():
 # --------------------------
 # LOGIN
 # --------------------------
+from config import Config  # 👈 importa la clase Config
+
 @routes.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -139,7 +143,7 @@ def login():
 
         # 🔒 Bloqueo por intentos fallidos
         if usuario["bloqueado"]:
-            if usuario["fecha_bloqueo"] and datetime.now() - usuario["fecha_bloqueo"] > timedelta(minutes=TIEMPO_BLOQUEO_MIN):
+            if usuario["fecha_bloqueo"] and datetime.now() - usuario["fecha_bloqueo"] > timedelta(minutes=Config.TIEMPO_BLOQUEO_MIN):
                 cursor.execute("""
                     UPDATE usuario 
                     SET bloqueado=FALSE, intentos_fallidos=0, fecha_bloqueo=NULL
@@ -163,17 +167,17 @@ def login():
                 VALUES (%s, %s, %s)
             """, (numdocumento, correo, False))
 
-            if intentos >= MAX_INTENTOS:
+            if intentos >= Config.MAX_INTENTOS:
                 cursor.execute("""
                     UPDATE usuario SET bloqueado=TRUE, fecha_bloqueo=%s 
                     WHERE correoElectronico=%s
                 """, (datetime.now(), correo))
                 conn.commit()
                 enviar_correo_bloqueo(correo)
-                flash("Cuenta bloqueada tras 3 intentos fallidos ❌", "danger")
+                flash(f"Cuenta bloqueada tras {Config.MAX_INTENTOS} intentos fallidos ❌", "danger")
             else:
                 conn.commit()
-                flash(f"Correo o contraseña incorrectos. Te quedan {MAX_INTENTOS - intentos} intentos ❌", "danger")
+                flash(f"Correo o contraseña incorrectos. Te quedan {Config.MAX_INTENTOS - intentos} intentos ❌", "danger")
 
             conn.close()
             return redirect(url_for("routes.login"))
@@ -240,6 +244,10 @@ def logout():
 @login_required(rol="taller")
 def perfil_taller():
     return render_template("perfil_taller.html", usuario=session["usuario"])
+
+@routes.route("/producto_premium/<nombre>")
+def producto_premium(nombre):
+    return render_template("producto_premium.html", nombre=nombre)
 
 # --------------------------
 # AGREGAR VEHÍCULO (CLIENTE)
