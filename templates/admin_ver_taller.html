@@ -1,0 +1,23 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-4">
+  <h2>📋 Detalle del Taller</h2>
+
+  <div class="card shadow">
+    <div class="card-body">
+      <p><b>Documento:</b> {{ taller.numdocumento }}</p>
+      <p><b>Nombre:</b> {{ taller.nombre_usu }}</p>
+      <p><b>Correo:</b> {{ taller.correoElectronico }}</p>
+      <p><b>Teléfono:</b> {{ taller.telefono }}</p>
+      <p><b>Dirección:</b> {{ taller.direccion }}</p>
+      <p><b>NIT:</b> {{ taller.nit }}</p>
+      <p><b>Estado de solicitud:</b> {{ taller.tipoRol }}</p>
+    </div>
+    <div class="card-footer d-flex justify-content-between">
+      <a href="{{ url_for('routes.aceptar_taller', numdocumento=taller.numdocumento) }}" class="btn btn-success">✅ Aceptar</a>
+      <a href="{{ url_for('routes.rechazar_taller', numdocumento=taller.numdocumento) }}" class="btn btn-danger">❌ Rechazar</a>
+      <a href="{{ url_for('routes.solicitudes_taller') }}" class="btn btn-secondary">⬅ Volver</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

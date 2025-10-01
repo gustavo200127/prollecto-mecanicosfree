@@ -8,9 +8,28 @@ import smtplib
 from email.mime.text import MIMEText
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from config import Config
-
+import os
+import uuid
+from werkzeug.utils import secure_filename
 
 routes = Blueprint("routes", __name__)
+
+# --------------------------
+# FUNCIONES AUXILIARES
+# --------------------------
+def conectar_db():
+    return mysql.connector.connect(
+        host=Config.DB_HOST,
+        user=Config.DB_USER,
+        password=Config.DB_PASSWORD,
+        database=Config.DB_NAME
+    )
+
+def allowed_file(filename):
+    """Valida extensiones de imagen usando config"""
+    ALLOWED_EXTENSIONS = current_app.config.get("ALLOWED_EXTENSIONS", {"png", "jpg", "jpeg", "gif"})
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 # --------------------------
 # Conexión a la BD
@@ -225,6 +244,50 @@ def login():
 
     return render_template("login.html")
 
+@routes.route("/solicitar_recuperacion", methods=["GET", "POST"])
+def solicitar_recuperacion():
+    if request.method == "POST":
+        correo = request.form.get("correoElectronico")
+
+        conn = conectar_db()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM usuario WHERE correoElectronico=%s", (correo,))
+        usuario = cursor.fetchone()
+        conn.close()
+
+        if usuario:
+            enviar_correo_recuperacion(correo)
+
+        flash("Si el correo está registrado, recibirás un enlace de recuperación ✅", "info")
+        return redirect(url_for("routes.login"))
+
+    return render_template("solicitar_recuperacion.html")
+
+@routes.route("/restablecer_contrasena/<token>", methods=["GET", "POST"])
+def restablecer_contrasena(token):
+    try:
+        correo = get_serializer().loads(token, salt="recuperar-contrasena", max_age=3600)  # 1h
+    except SignatureExpired:
+        flash("El enlace ha expirado ❌", "danger")
+        return redirect(url_for("routes.login"))
+    except BadSignature:
+        flash("Enlace inválido ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    if request.method == "POST":
+        nueva_contra = request.form["nueva_contrasena"]
+        hash_nuevo = bcrypt.hashpw(nueva_contra.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE usuario SET contrasena=%s WHERE correoElectronico=%s", (hash_nuevo, correo))
+        conn.commit()
+        conn.close()
+
+        flash("Tu contraseña fue actualizada con éxito ✅", "success")
+        return redirect(url_for("routes.login"))
+
+    return render_template("restablecer_contrasena.html", correo=correo)
 
 
 
@@ -248,6 +311,16 @@ def perfil_taller():
 @routes.route("/producto_premium/<nombre>")
 def producto_premium(nombre):
     return render_template("producto_premium.html", nombre=nombre)
+
+
+
+# --------------------------
+# PERFIL CLIENTE
+# --------------------------
+@routes.route("/perfil_cliente")
+@login_required(rol="cliente")
+def perfil_cliente():
+    return render_template("perfil_cliente.html", usuario=session["usuario"])
 
 # --------------------------
 # AGREGAR VEHÍCULO (CLIENTE)
@@ -286,14 +359,6 @@ def agregar_vehiculo():
         return redirect(url_for("routes.perfil_cliente"))
 
     return render_template("agregar_vehiculo.html")
-
-# --------------------------
-# PERFIL CLIENTE
-# --------------------------
-@routes.route("/perfil_cliente")
-@login_required(rol="cliente")
-def perfil_cliente():
-    return render_template("perfil_cliente.html", usuario=session["usuario"])
 
 # --------------------------
 # DASHBOARD ADMIN
@@ -372,9 +437,11 @@ def enviar_correo_bloqueo(destinatario):
     """Correo con enlace para desbloquear cuenta"""
     token = get_serializer().dumps(destinatario, salt="bloqueo-cuenta")
 
-    # 🔹 url_for requiere un contexto de app para _external=True
-    with current_app.app_context():
+    try:
         enlace = url_for("routes.desbloquear", token=token, _external=True)
+    except Exception as e:
+        print("❌ Error generando enlace de desbloqueo:", e)
+        return
 
     cuerpo = f"""
     Hola 👋, detectamos múltiples intentos fallidos en tu cuenta.
@@ -394,8 +461,11 @@ def enviar_correo_taller_completar_datos(destinatario):
     """Correo al taller recién registrado para completar su información"""
     token = get_serializer().dumps(destinatario, salt="completar-taller")
 
-    with current_app.app_context():
+    try:
         enlace = url_for("routes.completar_registro_taller", token=token, _external=True)
+    except Exception as e:
+        print("❌ Error generando enlace completar registro taller:", e)
+        return
 
     cuerpo = f"""
     Hola 👋,
@@ -442,13 +512,70 @@ def enviar_correo_cliente_activo(destinatario):
 
     enviar_correo(destinatario, "Tu cuenta de cliente está activa - Mecánicos Free", cuerpo)
 
+
+def enviar_correo_recuperacion(destinatario):
+    """Correo con enlace para restablecer contraseña"""
+    token = get_serializer().dumps(destinatario, salt="recuperar-contrasena")
+
+    try:
+        enlace = url_for("routes.restablecer_contrasena", token=token, _external=True)
+    except Exception as e:
+        print("❌ Error generando enlace recuperación:", e)
+        return
+
+    cuerpo = f"""
+    Hola 👋,
+
+    Hemos recibido una solicitud para restablecer tu contraseña en Mecánicos Free 🚗🔧
+
+    Haz clic en el siguiente enlace para crear una nueva contraseña:
+    {enlace}
+
+    Este enlace es válido por 1 hora.
+
+    Si no solicitaste el cambio de contraseña, ignora este mensaje.
+    """
+
+    enviar_correo(destinatario, "Recuperación de contraseña - Mecánicos Free", cuerpo)
+
+
+# --------------------------
+# DESBLOQUEAR CUENTA
+# --------------------------
+@routes.route("/desbloquear/<token>")
+def desbloquear(token):
+    try:
+        # Verificar que el token sea válido (15 minutos de duración)
+        correo = get_serializer().loads(token, salt="bloqueo-cuenta", max_age=900)
+    except SignatureExpired:
+        flash("El enlace ha expirado ❌", "danger")
+        return redirect(url_for("routes.login"))
+    except BadSignature:
+        flash("Enlace inválido ❌", "danger")
+        return redirect(url_for("routes.login"))
+
+    # 🔹 Si el token es válido → desbloquear al usuario en la BD
+    conn = conectar_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE usuario
+        SET intentos_fallidos = 0, bloqueado = 0
+        WHERE correoElectronico = %s
+    """, (correo,))
+    conn.commit()
+    conn.close()
+
+    flash("✅ Tu cuenta ha sido desbloqueada, ya puedes iniciar sesión.", "success")
+    return redirect(url_for("routes.login"))
+
 # --------------------------
 # COMPLETAR REGISTRO DE TALLER
 # --------------------------
 @routes.route("/completar_registro_taller/<token>", methods=["GET", "POST"])
 def completar_registro_taller(token):
     try:
-        correo = get_serializer().loads(token, salt="completar-taller", max_age=86400)  # 24h
+        correo = get_serializer().loads(token, salt="completar-taller", max_age=86400)  # válido 24h
     except SignatureExpired:
         flash("El enlace ha expirado ❌", "danger")
         return redirect(url_for("routes.login"))
@@ -464,20 +591,34 @@ def completar_registro_taller(token):
         conn = conectar_db()
         cursor = conn.cursor()
 
-        # Actualizar datos del taller
-        cursor.execute("""
-            UPDATE usuario 
-            SET telefono=%s, direccion=%s, nit=%s 
-            WHERE correoElectronico=%s
-        """, (telefono, direccion, nit, correo))
-        conn.commit()
+        # Buscar numdocumento del usuario según correo
+        cursor.execute("SELECT numdocumento FROM usuario WHERE correoElectronico = %s", (correo,))
+        usuario = cursor.fetchone()
+
+        if usuario:
+            numdocumento = usuario[0]
+
+            # Insertar datos en tabla taller
+            cursor.execute("""
+                INSERT INTO taller (numdocumento, telefono, direccion, nit)
+                VALUES (%s, %s, %s, %s)
+            """, (numdocumento, telefono, direccion, nit))
+
+            # Cambiar el rol a "pendiente_taller"
+            cursor.execute("""
+                UPDATE rol SET tipoRol = 'pendiente_taller' WHERE numdocumento = %s
+            """, (numdocumento,))
+
+            conn.commit()
+
+        cursor.close()
         conn.close()
 
         flash("Datos enviados. Un administrador revisará tu solicitud ✅", "success")
         return redirect(url_for("routes.login"))
 
     # Si es GET → mostrar formulario para completar datos
-    return render_template("completar_registro_taller.html", correo=correo)
+    return render_template("completar_datos_taller.html", correo=correo)
 
 
 
@@ -504,41 +645,43 @@ def registrar_usuario():
             flash("La contraseña debe tener al menos 8 caracteres, incluyendo letras y números ❌", "danger")
             return redirect(url_for("routes.registrar_usuario"))
 
-        # 3️⃣ Hashear la contraseña con bcrypt
+        # 3️⃣ Hashear la contraseña
         hashed = bcrypt.hashpw(contrasena.encode('utf-8'), bcrypt.gensalt())
 
         # 4️⃣ Conectar a la base de datos
         conn = conectar_db()
         cursor = conn.cursor(dictionary=True)
 
-        # 5️⃣ Verificar si el documento o correo ya existen
-        cursor.execute(
-            "SELECT * FROM usuario WHERE numdocumento=%s OR correoElectronico=%s",
-            (numdocumento, correoElectronico)
-        )
-        existente = cursor.fetchone()
-
-        if existente:
-            flash("El documento o correo ya está registrado ❌", "danger")
+        # 5️⃣ Verificar si el correo ya existe
+        cursor.execute("SELECT * FROM usuario WHERE correoElectronico=%s", (correoElectronico,))
+        if cursor.fetchone():
+            flash("El correo ya está en uso, usa otro ❌", "danger")
             conn.close()
             return redirect(url_for("routes.registrar_usuario"))
 
-        # 6️⃣ Ajustar activo según rol
+        # 6️⃣ Verificar si el documento ya existe
+        cursor.execute("SELECT * FROM usuario WHERE numdocumento=%s", (numdocumento,))
+        if cursor.fetchone():
+            flash("El documento ya está registrado ❌", "danger")
+            conn.close()
+            return redirect(url_for("routes.registrar_usuario"))
+
+        # 7️⃣ Ajustar activo según rol
         if rol == "taller":
             activo = 0  # pendiente de aprobación
             rol_db = "taller"
         else:
-            activo = 1  # clientes activos automáticamente
+            activo = 1
             rol_db = "cliente"
 
-        # 7️⃣ Insertar usuario en la tabla 'usuario'
+        # 8️⃣ Insertar usuario
         cursor.execute(
             "INSERT INTO usuario (numdocumento, nombre_usu, correoElectronico, contrasena, activo) VALUES (%s, %s, %s, %s, %s)",
             (numdocumento, nombre_usu, correoElectronico, hashed.decode('utf-8'), activo)
         )
         conn.commit()
 
-        # 8️⃣ Insertar rol en la tabla 'rol'
+        # 9️⃣ Insertar rol
         cursor.execute(
             "INSERT INTO rol (numdocumento, tipoRol) VALUES (%s, %s)",
             (numdocumento, rol_db)
@@ -546,7 +689,7 @@ def registrar_usuario():
         conn.commit()
         conn.close()
 
-        # 9️⃣ Si es taller → enviar correo para completar datos
+        # 🔟 Mensajes según rol
         if rol == "taller":
             enviar_correo_taller_completar_datos(correoElectronico)
             flash("Tu cuenta de taller fue registrada. Revisa tu correo para completar los datos ✅", "info")
@@ -555,8 +698,9 @@ def registrar_usuario():
 
         return redirect(url_for("routes.login"))
 
-    # 🔟 Si es GET → mostrar formulario
+    # GET → formulario
     return render_template("registrar_usuario.html")
+
 
 # --------------------------
 # LISTAR USUARIOS (solo admin)
@@ -703,6 +847,7 @@ def admin_productos():
 
     return render_template("admin_productos.html", productos=productos)
 
+
 # --------------------------
 # ADMIN - SERVICIOS
 # --------------------------
@@ -724,6 +869,8 @@ def admin_servicios():
 
     return render_template("admin_servicios.html", servicios=servicios)
 
+import uuid  # 👈 necesario para nombres únicos de imágenes
+
 # --------------------------
 # AGREGAR SERVICIO (TALLER)
 # --------------------------
@@ -734,16 +881,46 @@ def agregar_servicio():
         return redirect(url_for("routes.login"))
 
     if request.method == "POST":
-        tipo_servicio = request.form["tipo_servicio"]
-        precio = request.form["precio"]
-        disponibilidad = request.form["disponibilidad"]
+        tipo_servicio = request.form.get("tipo_servicio")
+        precio = request.form.get("precio")
+        disponibilidad = request.form.get("disponibilidad")
+        imagenes = request.files.getlist("imagenes")
+
+        if not tipo_servicio or not precio:
+            flash("Completa todos los campos requeridos ⚠️", "warning")
+            return redirect(url_for("routes.agregar_servicio"))
 
         conn = conectar_db()
         cursor = conn.cursor()
+
+        # Insertar servicio
         cursor.execute("""
             INSERT INTO servicio (tipo_servicio, precio, disponibilidad, id_usutaller)
             VALUES (%s, %s, %s, %s)
         """, (tipo_servicio, precio, disponibilidad, session["usuario"]["numdocumento"]))
+        conn.commit()
+
+        id_servicio = cursor.lastrowid
+
+        # Carpeta de subida
+        upload_folder = current_app.config.get("UPLOAD_FOLDER", "static/uploads")
+        os.makedirs(upload_folder, exist_ok=True)
+
+        # Guardar imágenes
+        for img in imagenes:
+            if img and allowed_file(img.filename):
+                original = secure_filename(img.filename)
+                ext = original.rsplit(".", 1)[1].lower()
+                unique_name = f"{uuid.uuid4().hex}.{ext}"
+                path = os.path.join(upload_folder, unique_name)
+                img.save(path)
+
+                url_imagen = f"/static/uploads/{unique_name}"
+                cursor.execute("""
+                    INSERT INTO imagenes (tipo, id_referencia, url_imagen)
+                    VALUES ('servicio', %s, %s)
+                """, (id_servicio, url_imagen))
+
         conn.commit()
         cursor.close()
         conn.close()
@@ -753,12 +930,13 @@ def agregar_servicio():
 
     return render_template("agregar_servicio.html")
 
+
 # --------------------------
 # AGREGAR PRODUCTO (TALLER)
 # --------------------------
 @routes.route("/productos/agregar", methods=["GET", "POST"])
 def agregar_producto():
-    if "usuario" not in session or session["usuario"]["rol"] != "taller":
+    if "usuario" not in session or session["usuario"].get("rol") != "taller":
         flash("Acceso no autorizado ❌", "danger")
         return redirect(url_for("routes.login"))
 
@@ -767,9 +945,16 @@ def agregar_producto():
         marca_producto = request.form.get("marca_producto")
         precio_producto = request.form.get("precio_producto")
         stock_producto = request.form.get("stock_producto")
+        imagenes = request.files.getlist("imagenes")
+
+        if not tipo_producto or not marca_producto or not precio_producto:
+            flash("Completa todos los campos requeridos ⚠️", "warning")
+            return redirect(url_for("routes.agregar_producto"))
 
         conn = conectar_db()
         cursor = conn.cursor()
+
+        # Insertar producto
         cursor.execute("""
             INSERT INTO producto (id_usutaller, tipo_producto, marca_producto, precio_producto, stock_producto, publicado)
             VALUES (%s, %s, %s, %s, %s, %s)
@@ -782,6 +967,29 @@ def agregar_producto():
             "publicado"
         ))
         conn.commit()
+
+        id_producto = cursor.lastrowid
+
+        # Carpeta de subida
+        upload_folder = current_app.config.get("UPLOAD_FOLDER", "static/uploads")
+        os.makedirs(upload_folder, exist_ok=True)
+
+        # Guardar imágenes
+        for img in imagenes:
+            if img and allowed_file(img.filename):
+                original = secure_filename(img.filename)
+                ext = original.rsplit(".", 1)[1].lower()
+                unique_name = f"{uuid.uuid4().hex}.{ext}"
+                path = os.path.join(upload_folder, unique_name)
+                img.save(path)
+
+                url_imagen = f"/static/uploads/{unique_name}"
+                cursor.execute("""
+                    INSERT INTO imagenes (tipo, id_referencia, url_imagen)
+                    VALUES ('producto', %s, %s)
+                """, (id_producto, url_imagen))
+
+        conn.commit()
         cursor.close()
         conn.close()
 
@@ -789,6 +997,7 @@ def agregar_producto():
         return redirect(url_for("routes.perfil_taller"))
 
     return render_template("agregar_producto.html")
+
 
 
 
@@ -874,22 +1083,82 @@ def admin_ver_servicio(id_servicio):
 # --------------------------
 @routes.route("/admin/solicitudes_taller")
 def solicitudes_taller():
-    if "usuario" not in session or session["usuario"]["rol"] != "admin":
+    # Validar que sea admin
+    if "usuario" not in session or session["usuario"].get("rol") != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
         return redirect(url_for("routes.login"))
 
-    conn = conectar_db()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("""
-        SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, r.tipoRol
-        FROM usuario u
-        JOIN rol r ON u.numdocumento = r.numdocumento
-        WHERE r.tipoRol = 'pendiente_taller'
-    """)
-    solicitudes = cursor.fetchall()
-    conn.close()
+    solicitudes = []
+    conn = None
+    cursor = None
+
+    try:
+        conn = conectar_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT u.numdocumento, u.nombre_usu, u.correoElectronico, 
+                   t.telefono, t.direccion, t.nit, r.tipoRol
+            FROM usuario u
+            JOIN rol r ON u.numdocumento = r.numdocumento
+            JOIN taller t ON u.numdocumento = t.numdocumento
+            WHERE r.tipoRol = 'pendiente_taller'
+        """)
+        solicitudes = cursor.fetchall()
+
+    except Exception as e:
+        flash(f"Error al obtener las solicitudes: {e}", "danger")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
 
     return render_template("admin_solicitudes_taller.html", solicitudes=solicitudes)
+
+# --------------------------
+# ADMIN - VER DETALLE DE TALLER
+# --------------------------
+@routes.route("/admin/solicitudes_taller/<int:numdocumento>")
+def ver_taller(numdocumento):
+    if "usuario" not in session or session["usuario"].get("rol") != "admin":
+        flash("Debes iniciar sesión como administrador", "warning")
+        return redirect(url_for("routes.login"))
+
+    conn = None
+    cursor = None
+    taller = None
+
+    try:
+        conn = conectar_db()
+        cursor = conn.cursor(dictionary=True)
+
+        cursor.execute("""
+            SELECT u.numdocumento, u.nombre_usu, u.correoElectronico,
+                   t.telefono, t.direccion, t.nit, r.tipoRol
+            FROM usuario u
+            JOIN rol r ON u.numdocumento = r.numdocumento
+            JOIN taller t ON u.numdocumento = t.numdocumento
+            WHERE u.numdocumento = %s
+        """, (numdocumento,))
+        taller = cursor.fetchone()
+
+    except Exception as e:
+        flash(f"Error al obtener el taller: {e}", "danger")
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+    if not taller:
+        flash("No se encontró el taller solicitado ❌", "danger")
+        return redirect(url_for("routes.solicitudes_taller"))
+
+    return render_template("admin_ver_taller.html", taller=taller)
+
 
 
 # --------------------------
@@ -897,17 +1166,27 @@ def solicitudes_taller():
 # --------------------------
 @routes.route("/admin/solicitudes_taller/aceptar/<int:numdocumento>")
 def aceptar_taller(numdocumento):
-    if "usuario" not in session or session["usuario"]["rol"] != "admin":
+    if "usuario" not in session or session["usuario"].get("rol") != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
         return redirect(url_for("routes.login"))
 
-    conn = conectar_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE rol SET tipoRol = 'taller' WHERE numdocumento = %s", (numdocumento,))
-    conn.commit()
-    conn.close()
+    conn = None
+    cursor = None
 
-    flash("Taller aprobado con éxito ✅", "success")
+    try:
+        conn = conectar_db()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE rol SET tipoRol = 'taller' WHERE numdocumento = %s", (numdocumento,))
+        conn.commit()
+        flash("Taller aprobado con éxito ✅", "success")
+    except Exception as e:
+        flash(f"Error al aprobar taller: {e}", "danger")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
     return redirect(url_for("routes.solicitudes_taller"))
 
 
@@ -916,20 +1195,31 @@ def aceptar_taller(numdocumento):
 # --------------------------
 @routes.route("/admin/solicitudes_taller/rechazar/<int:numdocumento>")
 def rechazar_taller(numdocumento):
-    if "usuario" not in session or session["usuario"]["rol"] != "admin":
+    if "usuario" not in session or session["usuario"].get("rol") != "admin":
         flash("Debes iniciar sesión como administrador", "warning")
         return redirect(url_for("routes.login"))
 
-    conn = conectar_db()
-    cursor = conn.cursor()
-    # eliminamos el rol y el usuario
-    cursor.execute("DELETE FROM rol WHERE numdocumento = %s", (numdocumento,))
-    cursor.execute("DELETE FROM usuario WHERE numdocumento = %s", (numdocumento,))
-    conn.commit()
-    conn.close()
+    conn = None
+    cursor = None
 
-    flash("Solicitud de taller rechazada ❌", "info")
+    try:
+        conn = conectar_db()
+        cursor = conn.cursor()
+        # eliminamos el rol y el usuario
+        cursor.execute("DELETE FROM rol WHERE numdocumento = %s", (numdocumento,))
+        cursor.execute("DELETE FROM usuario WHERE numdocumento = %s", (numdocumento,))
+        conn.commit()
+        flash("Solicitud de taller rechazada ❌", "info")
+    except Exception as e:
+        flash(f"Error al rechazar taller: {e}", "danger")
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
     return redirect(url_for("routes.solicitudes_taller"))
+
 
 # --------------------------
 # AGREGAR PRODUCTO AL CARRITO (permitir cliente o taller)

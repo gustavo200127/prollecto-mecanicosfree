@@ -2,21 +2,26 @@
 {% block content %}
 <div class="container mt-4">
   <h2>Agregar Servicio</h2>
-  <form method="post" action="{{ url_for('routes.agregar_servicio') }}">
+  <form method="POST" action="{{ url_for('routes.agregar_servicio') }}" enctype="multipart/form-data">
     <div class="mb-3">
-      <label>Tipo de Servicio</label>
-      <input type="text" name="tipo_servicio" class="form-control" required>
+      <label for="tipo_servicio" class="form-label">Tipo de Servicio</label>
+      <input type="text" id="tipo_servicio" name="tipo_servicio" class="form-control" required>
     </div>
     <div class="mb-3">
-      <label>Precio</label>
-      <input type="number" step="0.01" name="precio" class="form-control" required>
+      <label for="precio" class="form-label">Precio</label>
+      <input type="number" step="0.01" min="0" id="precio" name="precio" class="form-control" required>
     </div>
     <div class="mb-3">
-      <label>Disponible</label>
-      <select name="disponibilidad" class="form-control">
+      <label for="disponibilidad" class="form-label">Disponible</label>
+      <select id="disponibilidad" name="disponibilidad" class="form-control">
         <option value="1" selected>Sí</option>
         <option value="0">No</option>
       </select>
+    </div>
+    <div class="mb-3">
+      <label for="imagenes" class="form-label">Imágenes del servicio</label>
+      <input type="file" id="imagenes" name="imagenes" class="form-control" accept="image/*" multiple>
+      <small class="form-text text-muted">Puedes seleccionar varias imágenes.</small>
     </div>
     <button type="submit" class="btn btn-success">Guardar</button>
     <a href="{{ url_for('routes.perfil_taller') }}" class="btn btn-secondary">Cancelar</a>

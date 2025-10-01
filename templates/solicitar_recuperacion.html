@@ -1,0 +1,13 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-5" style="max-width: 400px;">
+  <h3 class="text-center">Recuperar contraseña</h3>
+  <form method="POST">
+    <div class="mb-3">
+      <label for="correo" class="form-label">Correo electrónico</label>
+      <input type="email" class="form-control" id="correo" name="correoElectronico" placeholder="usuario@ejemplo.com" required>
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Enviar enlace</button>
+  </form>
+</div>
+{% endblock %}

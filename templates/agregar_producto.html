@@ -2,22 +2,27 @@
 {% block content %}
 <div class="container mt-4">
   <h2>Agregar Producto</h2>
-  <form method="post" action="{{ url_for('routes.agregar_producto') }}">
+  <form method="POST" action="{{ url_for('routes.agregar_producto') }}" enctype="multipart/form-data">
     <div class="mb-3">
-      <label>Tipo de Producto</label>
-      <input type="text" name="tipo_producto" class="form-control" required>
+      <label for="tipo_producto" class="form-label">Tipo de Producto</label>
+      <input type="text" id="tipo_producto" name="tipo_producto" class="form-control" required>
     </div>
     <div class="mb-3">
-      <label>Marca</label>
-      <input type="text" name="marca_producto" class="form-control" required>
+      <label for="marca_producto" class="form-label">Marca</label>
+      <input type="text" id="marca_producto" name="marca_producto" class="form-control" required>
     </div>
     <div class="mb-3">
-      <label>Precio</label>
-      <input type="number" step="0.01" name="precio_producto" class="form-control" required>
+      <label for="precio_producto" class="form-label">Precio</label>
+      <input type="number" step="0.01" min="0" id="precio_producto" name="precio_producto" class="form-control" required>
     </div>
     <div class="mb-3">
-      <label>Stock</label>
-      <input type="number" name="stock_producto" class="form-control" required>
+      <label for="stock_producto" class="form-label">Stock</label>
+      <input type="number" min="0" id="stock_producto" name="stock_producto" class="form-control" required>
+    </div>
+    <div class="mb-3">
+      <label for="imagenes" class="form-label">Imágenes del producto</label>
+      <input type="file" id="imagenes" name="imagenes" class="form-control" accept="image/*" multiple>
+      <small class="form-text text-muted">Puedes seleccionar varias imágenes.</small>
     </div>
     <button type="submit" class="btn btn-success">Guardar</button>
     <a href="{{ url_for('routes.perfil_taller') }}" class="btn btn-secondary">Cancelar</a>

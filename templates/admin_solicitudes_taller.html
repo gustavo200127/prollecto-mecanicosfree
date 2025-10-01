@@ -13,9 +13,10 @@
       {% endfor %}
     {% endif %}
   {% endwith %}
+
   <div class="mb-3">
     <a href="{{ url_for('routes.admin_dashboard') }}" class="btn btn-secondary">⬅ Volver al Panel Admin</a>
-</div>
+  </div>
 
   {% if solicitudes %}
     <div class="table-responsive">
@@ -25,6 +26,9 @@
             <th>Documento</th>
             <th>Nombre</th>
             <th>Correo</th>
+            <th>Teléfono</th>
+            <th>Dirección</th>
+            <th>NIT</th>
             <th>Acciones</th>
           </tr>
         </thead>
@@ -34,9 +38,19 @@
             <td>{{ s.numdocumento }}</td>
             <td>{{ s.nombre_usu }}</td>
             <td>{{ s.correoElectronico }}</td>
+            <td>{{ s.telefono }}</td>
+            <td>{{ s.direccion }}</td>
+            <td>{{ s.nit }}</td>
             <td>
+              <!-- 🔹 Ver detalle del taller -->
+              <a href="{{ url_for('routes.ver_taller', numdocumento=s.numdocumento) }}" 
+                 class="btn btn-info btn-sm">Ver más</a>
+              
+              <!-- 🔹 Aceptar -->
               <a href="{{ url_for('routes.aceptar_taller', numdocumento=s.numdocumento) }}" 
                  class="btn btn-success btn-sm">Aceptar</a>
+              
+              <!-- 🔹 Rechazar -->
               <a href="{{ url_for('routes.rechazar_taller', numdocumento=s.numdocumento) }}" 
                  class="btn btn-danger btn-sm">Rechazar</a>
             </td>
