@@ -10,8 +10,8 @@
         {% for s in servicios %}
         <div class="col-md-4">
             <div class="card shadow-lg h-100 border-0">
-                <img src="{{ url_for('static', filename=s.imagen) if s.imagen else url_for('static', filename='img/servicio_default.jpg') }}" 
-                     class="card-img-top" alt="Servicio">
+                <!-- Ya trae s.imagen como URL válida o default -->
+                <img src="{{ s.imagen }}" class="card-img-top" alt="Servicio">
                 <div class="card-body">
                     <h5 class="card-title fw-bold">{{ s.tipo_servicio }}</h5>
                     <p class="card-text text-muted mb-1">Taller: <strong>{{ s.taller }}</strong></p>
@@ -46,8 +46,8 @@
         {% for p in productos %}
         <div class="col-md-4">
             <div class="card shadow-lg h-100 border-0">
-                <img src="{{ url_for('static', filename=p.imagen) if p.imagen else url_for('static', filename='img/producto_default.jpg') }}" 
-                     class="card-img-top" alt="Producto">
+                <!-- Ya trae p.imagen como URL válida o default -->
+                <img src="{{ p.imagen }}" class="card-img-top" alt="Producto">
                 <div class="card-body">
                     <h5 class="card-title fw-bold">{{ p.tipo_producto }}</h5>
                     <p class="card-text text-muted mb-1">Marca: <strong>{{ p.marca_producto }}</strong></p>

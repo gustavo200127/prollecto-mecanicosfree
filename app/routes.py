@@ -1,4 +1,7 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, current_app
+from flask import (
+    Blueprint, render_template, request, redirect, url_for,
+    flash, session, current_app
+)
 import mysql.connector
 from functools import wraps
 import re
@@ -12,12 +15,15 @@ import os
 import uuid
 from werkzeug.utils import secure_filename
 
+# Definición del blueprint
 routes = Blueprint("routes", __name__)
 
 # --------------------------
 # FUNCIONES AUXILIARES
 # --------------------------
+
 def conectar_db():
+    """Crea una conexión a la base de datos MySQL usando variables de config"""
     return mysql.connector.connect(
         host=Config.DB_HOST,
         user=Config.DB_USER,
@@ -25,10 +31,24 @@ def conectar_db():
         database=Config.DB_NAME
     )
 
-def allowed_file(filename):
-    """Valida extensiones de imagen usando config"""
-    ALLOWED_EXTENSIONS = current_app.config.get("ALLOWED_EXTENSIONS", {"png", "jpg", "jpeg", "gif"})
-    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def allowed_file(filename: str) -> bool:
+    """
+    Verifica si el archivo tiene una extensión permitida.
+    Usa la configuración de Flask (ALLOWED_EXTENSIONS).
+    """
+    if not filename or "." not in filename:
+        return False
+
+    ext = filename.rsplit(".", 1)[1].lower()
+    # Intentar primero con current_app (si estamos en contexto Flask)
+    try:
+        allowed = current_app.config.get("ALLOWED_EXTENSIONS", {"png", "jpg", "jpeg", "gif"})
+    except RuntimeError:
+        # fallback en caso de que no haya contexto de aplicación (por ejemplo, tests)
+        allowed = Config.ALLOWED_EXTENSIONS
+
+    return ext in allowed
 
 
 # --------------------------
@@ -111,15 +131,26 @@ def catalogo():
     conn = conectar_db()
     cursor = conn.cursor(dictionary=True)
 
+    # Productos publicados con su imagen más reciente
     cursor.execute("""
-        SELECT p.*, u.nombre_usu AS taller
+        SELECT p.*, u.nombre_usu AS taller,
+               (SELECT im.url_imagen
+                FROM imagenes im
+                WHERE im.tipo = 'producto' AND im.id_referencia = p.id_producto
+                ORDER BY im.fecha_subida DESC LIMIT 1) AS imagen
         FROM producto p
         JOIN usuario u ON p.id_usutaller = u.numdocumento
+        WHERE p.publicado = 'publicado'
     """)
     productos = cursor.fetchall()
 
+    # Servicios con su imagen más reciente
     cursor.execute("""
-        SELECT s.*, u.nombre_usu AS taller
+        SELECT s.*, u.nombre_usu AS taller,
+               (SELECT im.url_imagen
+                FROM imagenes im
+                WHERE im.tipo = 'servicio' AND im.id_referencia = s.id_servicio
+                ORDER BY im.fecha_subida DESC LIMIT 1) AS imagen
         FROM servicio s
         JOIN usuario u ON s.id_usutaller = u.numdocumento
     """)
@@ -127,6 +158,35 @@ def catalogo():
 
     cursor.close()
     conn.close()
+
+    # Función para normalizar rutas
+    def resolver_url(imagen_db: str, tipo_default: str) -> str:
+        """
+        Devuelve la URL correcta para mostrar en el catálogo.
+        - Si no hay imagen, devuelve la default.
+        - Si la ruta está en static (ej: 'uploads/...'), la pasa a url_for.
+        - Si ya es URL absoluta, la devuelve tal cual.
+        """
+        if not imagen_db:
+            return url_for('static', filename=tipo_default)
+
+        # Normalizamos extensión jfif -> jpg (solo por seguridad visual)
+        if imagen_db.lower().endswith(".jfif"):
+            imagen_db = imagen_db.rsplit(".", 1)[0] + ".jpg"
+
+        # Si la ruta es relativa (ej: uploads/productos/xxx.jpg)
+        if not (imagen_db.startswith("http://") or imagen_db.startswith("https://") or imagen_db.startswith("/")):
+            return url_for('static', filename=imagen_db)
+
+        # Si ya es absoluta, la devolvemos como está
+        return imagen_db
+
+    # Normalizar productos y servicios
+    for p in productos:
+        p["imagen"] = resolver_url(p.get("imagen"), "img/producto_default.jpg")
+
+    for s in servicios:
+        s["imagen"] = resolver_url(s.get("imagen"), "img/servicio_default.jpg")
 
     return render_template("catalogo.html", productos=productos, servicios=servicios)
 
@@ -874,7 +934,7 @@ import uuid  # 👈 necesario para nombres únicos de imágenes
 # --------------------------
 # AGREGAR SERVICIO (TALLER)
 # --------------------------
-@routes.route("/agregar_servicio", methods=["GET", "POST"])
+@routes.route("/servicios/agregar", methods=["GET", "POST"])
 def agregar_servicio():
     if "usuario" not in session or session["usuario"].get("rol") != "taller":
         flash("Acceso no autorizado ❌", "danger")
@@ -883,9 +943,10 @@ def agregar_servicio():
     if request.method == "POST":
         tipo_servicio = request.form.get("tipo_servicio")
         precio = request.form.get("precio")
-        disponibilidad = request.form.get("disponibilidad")
+        disponibilidad = request.form.get("disponibilidad", 1)
         imagenes = request.files.getlist("imagenes")
 
+        # Validación de campos requeridos
         if not tipo_servicio or not precio:
             flash("Completa todos los campos requeridos ⚠️", "warning")
             return redirect(url_for("routes.agregar_servicio"))
@@ -895,40 +956,53 @@ def agregar_servicio():
 
         # Insertar servicio
         cursor.execute("""
-            INSERT INTO servicio (tipo_servicio, precio, disponibilidad, id_usutaller)
+            INSERT INTO servicio (id_usutaller, tipo_servicio, precio, disponibilidad)
             VALUES (%s, %s, %s, %s)
-        """, (tipo_servicio, precio, disponibilidad, session["usuario"]["numdocumento"]))
+        """, (
+            session["usuario"]["numdocumento"],
+            tipo_servicio,
+            precio,
+            disponibilidad
+        ))
         conn.commit()
-
         id_servicio = cursor.lastrowid
 
         # Carpeta de subida
-        upload_folder = current_app.config.get("UPLOAD_FOLDER", "static/uploads")
+        upload_folder = os.path.join(current_app.static_folder, "uploads", "servicios")
         os.makedirs(upload_folder, exist_ok=True)
 
         # Guardar imágenes
         for img in imagenes:
             if img and allowed_file(img.filename):
-                original = secure_filename(img.filename)
-                ext = original.rsplit(".", 1)[1].lower()
-                unique_name = f"{uuid.uuid4().hex}.{ext}"
+                filename = secure_filename(img.filename)
+                ext = filename.rsplit(".", 1)[1].lower()
+
+                # Normalizar jfif -> jpg
+                if ext == "jfif":
+                    ext = "jpg"
+                    filename = filename.rsplit(".", 1)[0] + ".jpg"
+
+                unique_name = f"{uuid.uuid4().hex}_{filename}"
                 path = os.path.join(upload_folder, unique_name)
                 img.save(path)
 
-                url_imagen = f"/static/uploads/{unique_name}"
+                # Guardar ruta relativa en DB (sin /static al inicio)
+                ruta_db = f"uploads/servicios/{unique_name}"
+
                 cursor.execute("""
                     INSERT INTO imagenes (tipo, id_referencia, url_imagen)
                     VALUES ('servicio', %s, %s)
-                """, (id_servicio, url_imagen))
+                """, (id_servicio, ruta_db))
 
         conn.commit()
         cursor.close()
         conn.close()
 
-        flash("Servicio agregado correctamente ✅", "success")
+        flash("Servicio agregado con éxito ✅", "success")
         return redirect(url_for("routes.perfil_taller"))
 
     return render_template("agregar_servicio.html")
+
 
 
 # --------------------------
@@ -947,6 +1021,7 @@ def agregar_producto():
         stock_producto = request.form.get("stock_producto")
         imagenes = request.files.getlist("imagenes")
 
+        # Validación de campos requeridos
         if not tipo_producto or not marca_producto or not precio_producto:
             flash("Completa todos los campos requeridos ⚠️", "warning")
             return redirect(url_for("routes.agregar_producto"))
@@ -967,27 +1042,34 @@ def agregar_producto():
             "publicado"
         ))
         conn.commit()
-
         id_producto = cursor.lastrowid
 
         # Carpeta de subida
-        upload_folder = current_app.config.get("UPLOAD_FOLDER", "static/uploads")
+        upload_folder = os.path.join(current_app.static_folder, "uploads", "productos")
         os.makedirs(upload_folder, exist_ok=True)
 
         # Guardar imágenes
         for img in imagenes:
             if img and allowed_file(img.filename):
-                original = secure_filename(img.filename)
-                ext = original.rsplit(".", 1)[1].lower()
-                unique_name = f"{uuid.uuid4().hex}.{ext}"
+                filename = secure_filename(img.filename)
+                ext = filename.rsplit(".", 1)[1].lower()
+
+                # Normalizar jfif -> jpg
+                if ext == "jfif":
+                    ext = "jpg"
+                    filename = filename.rsplit(".", 1)[0] + ".jpg"
+
+                unique_name = f"{uuid.uuid4().hex}_{filename}"
                 path = os.path.join(upload_folder, unique_name)
                 img.save(path)
 
-                url_imagen = f"/static/uploads/{unique_name}"
+                # Guardar ruta relativa en DB (sin /static al inicio)
+                ruta_db = f"uploads/productos/{unique_name}"
+
                 cursor.execute("""
                     INSERT INTO imagenes (tipo, id_referencia, url_imagen)
                     VALUES ('producto', %s, %s)
-                """, (id_producto, url_imagen))
+                """, (id_producto, ruta_db))
 
         conn.commit()
         cursor.close()

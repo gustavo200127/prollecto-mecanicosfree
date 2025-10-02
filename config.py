@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 # Cargar variables del archivo .env
 load_dotenv()
 
+
 class Config:
     # 🔐 Seguridad general
     SECRET_KEY = os.getenv("SECRET_KEY", "default_secret")
@@ -26,6 +27,19 @@ class Config:
     TIEMPO_BLOQUEO_MIN = int(os.getenv("TIEMPO_BLOQUEO_MIN", 5))   # Minutos de bloqueo
 
     # 📂 Subida de imágenes
-    UPLOAD_FOLDER = os.getenv("UPLOAD_FOLDER", os.path.join("static", "uploads"))
-    ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
-    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))  # 16MB por petición
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))  # carpeta base del proyecto
+    UPLOAD_FOLDER = os.getenv(
+        "UPLOAD_FOLDER",
+        os.path.join(BASE_DIR, "static", "uploads")
+    )
+    ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "jfif", "webp"}
+
+    MAX_CONTENT_LENGTH = int(os.getenv("MAX_CONTENT_LENGTH", 16 * 1024 * 1024))  # 16 MB
+
+    # 📧 Configuración de correo (si piensas enviar mails)
+    MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
+    MAIL_PORT = int(os.getenv("MAIL_PORT", 587))
+    MAIL_USE_TLS = os.getenv("MAIL_USE_TLS", "true").lower() in ("true", "1", "yes")
+    MAIL_USERNAME = os.getenv("MAIL_USERNAME")
+    MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+    MAIL_DEFAULT_SENDER = os.getenv("MAIL_DEFAULT_SENDER", MAIL_USERNAME)
