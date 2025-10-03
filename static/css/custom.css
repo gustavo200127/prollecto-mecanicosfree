@@ -1,0 +1,146 @@
+/* =======================
+   Estilos Globales
+======================= */
+body {
+  background-color: #f8f9fa;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  color: #212529;
+  margin: 0;
+  padding: 0;
+}
+
+/* Navbar */
+.navbar {
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.navbar-brand { font-weight: bold; }
+.nav-link { transition: color 0.3s ease; }
+.nav-link:hover { color: #d1e7dd !important; }
+
+/* Footer */
+footer {
+  background-color: #198754;
+  color: #fff;
+  font-size: 0.9rem;
+  padding: 1rem 0;
+  margin-top: auto;
+}
+
+/* =======================
+   Carrusel y overlay
+======================= */
+.carousel-img {
+  height: 450px;
+  object-fit: cover;
+  border-radius: 10px;
+  transition: transform 0.5s ease, filter 0.5s ease;
+}
+.carousel-img:hover {
+  transform: scale(1.03);
+  filter: brightness(1.05) saturate(1.1);
+}
+
+.carousel-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  color: #fff;
+}
+
+.overlay-title {
+  font-size: 2rem;
+  font-weight: bold;
+  text-shadow: 2px 2px 8px rgba(0,0,0,0.6);
+}
+
+.overlay-text {
+  font-size: 1.2rem;
+  margin-top: 0.5rem;
+  text-shadow: 1px 1px 6px rgba(0,0,0,0.5);
+}
+
+/* =======================
+   Catálogo y cards
+======================= */
+.card-img-top {
+  height: 250px;
+  object-fit: cover;
+  border-radius: 8px;
+  transition: transform 0.5s ease, filter 0.5s ease;
+}
+.card-img-top:hover {
+  transform: scale(1.03);
+  filter: brightness(1.05) saturate(1.1);
+}
+
+.card-outline {
+  border: 2px solid #198754;
+  border-radius: 1rem;
+  transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+  opacity: 0;
+  transform: translateY(20px);
+}
+.card-outline:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  border-color: #0f5132;
+}
+
+.fade-in {
+  opacity: 1 !important;
+  transform: translateY(0) !important;
+}
+
+/* =======================
+   Botones y ripple
+======================= */
+.btn {
+  position: relative;
+  overflow: hidden;
+}
+.ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.7);
+  transform: scale(0);
+  animation: ripple-animation 0.6s linear;
+  pointer-events: none;
+  width: 100px;
+  height: 100px;
+}
+@keyframes ripple-animation { to { transform: scale(4); opacity: 0; } }
+
+.btn-success, .btn-primary {
+  transition: all 0.3s ease;
+}
+.btn-success:hover { background-color: #157347; transform: scale(1.05); }
+.btn-primary:hover { transform: scale(1.05); }
+
+/* Inputs cantidad */
+input[type="number"] {
+  border-radius: 0.5rem;
+  border: 1px solid #ccc;
+  padding: 0.3rem 0.5rem;
+  text-align: center;
+  transition: border-color 0.3s;
+}
+input[type="number"]:focus {
+  border-color: #198754;
+  outline: none;
+}
+
+/* =======================
+   Responsive
+======================= */
+@media (max-width: 768px) {
+  .carousel-img { height: 250px; }
+  input[type="number"] { width: 60px; }
+}

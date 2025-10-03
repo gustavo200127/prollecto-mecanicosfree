@@ -2,6 +2,7 @@
 {% block content %}
 <div class="container mt-4">
   <h2>📄 Mis Facturas</h2>
+
   {% if facturas %}
     <table class="table table-bordered">
       <thead class="table-dark">
@@ -13,7 +14,10 @@
           <td>{{ f.id_factura }}</td>
           <td>{{ f.fecha_emision }}</td>
           <td>${{ f.total }}</td>
-          <td><a href="{{ url_for('routes.ver_factura', id_factura=f.id_factura) }}" class="btn btn-sm btn-primary">Ver</a></td>
+          <td>
+            <a href="{{ url_for('routes.ver_factura', id_factura=f.id_factura) }}" 
+               class="btn btn-sm btn-primary">Ver</a>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -21,7 +25,14 @@
   {% else %}
     <p class="text-muted">No tienes facturas.</p>
   {% endif %}
+
+  <!-- 🔹 Botón dinámico según rol -->
   <div class="mt-3">
-    <a href="{{ url_for('routes.perfil_cliente') }}" class="btn btn-secondary">⬅ Volver a Mi Perfil</a>
+    {% if session['usuario']['rol'] == 'cliente' %}
+      <a href="{{ url_for('routes.perfil_cliente') }}" class="btn btn-secondary">⬅ Volver a Mi Perfil</a>
+    {% elif session['usuario']['rol'] == 'taller' %}
+      <a href="{{ url_for('routes.perfil_taller') }}" class="btn btn-secondary">⬅ Volver a Mi Perfil</a>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

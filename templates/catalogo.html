@@ -6,81 +6,121 @@
 
     <!-- Servicios -->
     <h3 class="mb-4">🔧 Servicios</h3>
-    <div class="row g-4">
-        {% for s in servicios %}
-        <div class="col-md-4">
-            <div class="card shadow-lg h-100 border-0">
-                <!-- Ya trae s.imagen como URL válida o default -->
-                <img src="{{ s.imagen }}" class="card-img-top" alt="Servicio">
-                <div class="card-body">
-                    <h5 class="card-title fw-bold">{{ s.tipo_servicio }}</h5>
-                    <p class="card-text text-muted mb-1">Taller: <strong>{{ s.taller }}</strong></p>
-                    <p class="card-text mb-1">💲 <strong>${{ s.precio }}</strong></p>
-                    <p>
-                        {% if s.disponibilidad == 1 %}
-                            <span class="badge bg-success">Disponible</span>
-                        {% else %}
-                            <span class="badge bg-danger">No disponible</span>
-                        {% endif %}
-                    </p>
-                </div>
-                <div class="card-footer bg-transparent border-0 text-center">
-                    {% if s.disponibilidad == 1 and session.get("usuario") and session["usuario"]["rol"] in ["cliente", "taller"] %}
-                        <form action="{{ url_for('routes.carrito_agregar_servicio', id_servicio=s.id_servicio) }}" method="post">
-                            <button type="submit" class="btn btn-primary w-100">🛒 Añadir</button>
-                        </form>
-                    {% else %}
-                        <small class="text-muted">Solo clientes/talleres</small>
+    {% if servicios %}
+    <div id="carouselServicios" class="carousel slide" data-bs-ride="carousel">
+        <div class="carousel-inner">
+            {% for s in servicios|batch(3, '') %}
+            <div class="carousel-item {% if loop.first %}active{% endif %}">
+                <div class="row g-4">
+                    {% for serv in s %}
+                    {% if serv %}
+                    <div class="col-md-4">
+                        <div class="card shadow-lg h-100 border-0">
+                            <img src="{{ serv.imagen }}" class="card-img-top" alt="Servicio">
+                            <div class="card-body">
+                                <h5 class="card-title fw-bold">{{ serv.tipo_servicio }}</h5>
+                                <p class="card-text text-muted mb-1">💼 Taller: <strong>{{ serv.taller }}</strong></p>
+                                <p class="card-text mb-1">💲 <strong>${{ serv.precio }}</strong></p>
+                                <p>
+                                    {% if serv.disponibilidad == 1 %}
+                                        <span class="badge bg-success">Disponible</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">No disponible</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="card-footer bg-transparent border-0 text-center">
+                                {% if serv.disponibilidad == 1 and session.get("usuario") and session["usuario"]["rol"] in ["cliente", "taller"] %}
+                                    <form action="{{ url_for('routes.carrito_agregar_servicio', id_servicio=serv.id_servicio) }}" method="post">
+                                        <button type="submit" class="btn btn-primary w-100">🛒 Añadir</button>
+                                    </form>
+                                {% else %}
+                                    <small class="text-muted">Solo clientes/talleres</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                     {% endif %}
+                    {% endfor %}
                 </div>
             </div>
+            {% endfor %}
         </div>
-        {% else %}
-        <p class="text-center text-muted">No hay servicios disponibles</p>
-        {% endfor %}
+
+        <!-- Controles -->
+        <button class="carousel-control-prev" type="button" data-bs-target="#carouselServicios" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon"></span>
+        </button>
+        <button class="carousel-control-next" type="button" data-bs-target="#carouselServicios" data-bs-slide="next">
+            <span class="carousel-control-next-icon"></span>
+        </button>
     </div>
+    {% else %}
+        <p class="text-center text-muted">No hay servicios disponibles</p>
+    {% endif %}
+
 
     <!-- Productos -->
     <h3 class="mt-5 mb-4">🛠️ Productos</h3>
-    <div class="row g-4">
-        {% for p in productos %}
-        <div class="col-md-4">
-            <div class="card shadow-lg h-100 border-0">
-                <!-- Ya trae p.imagen como URL válida o default -->
-                <img src="{{ p.imagen }}" class="card-img-top" alt="Producto">
-                <div class="card-body">
-                    <h5 class="card-title fw-bold">{{ p.tipo_producto }}</h5>
-                    <p class="card-text text-muted mb-1">Marca: <strong>{{ p.marca_producto }}</strong></p>
-                    <p class="card-text mb-1">💲 <strong>${{ p.precio_producto }}</strong></p>
-                    <p>
-                        {% if p.stock_producto > 0 %}
-                            <span class="badge bg-success">Stock: {{ p.stock_producto }}</span>
-                        {% else %}
-                            <span class="badge bg-danger">Agotado</span>
-                        {% endif %}
-                    </p>
-                </div>
-                <div class="card-footer bg-transparent border-0 text-center">
-                    {% if p.stock_producto > 0 %}
-                        {% if session.get("usuario") and session["usuario"]["rol"] in ["cliente", "taller"] %}
-                            <form action="{{ url_for('routes.carrito_agregar', id_producto=p.id_producto) }}" method="post" class="d-flex">
-                                <input type="number" name="cantidad" value="1" min="1" max="{{ p.stock_producto }}" 
-                                       class="form-control me-2" style="width: 80px;">
-                                <button type="submit" class="btn btn-success flex-fill">🛒 Añadir</button>
-                            </form>
-                        {% else %}
-                            <small class="text-muted">Solo clientes/talleres</small>
-                        {% endif %}
-                    {% else %}
-                        <small class="text-muted">No disponible</small>
+    {% if productos %}
+    <div id="carouselProductos" class="carousel slide" data-bs-ride="carousel">
+        <div class="carousel-inner">
+            {% for p in productos|batch(3, '') %}
+            <div class="carousel-item {% if loop.first %}active{% endif %}">
+                <div class="row g-4">
+                    {% for prod in p %}
+                    {% if prod %}
+                    <div class="col-md-4">
+                        <div class="card shadow-lg h-100 border-0">
+                            <img src="{{ prod.imagen }}" class="card-img-top" alt="Producto">
+                            <div class="card-body">
+                                <h5 class="card-title fw-bold">{{ prod.tipo_producto }}</h5>
+                                <p class="card-text text-muted mb-1">Marca: <strong>{{ prod.marca_producto }}</strong></p>
+                                <p class="card-text text-muted mb-1">💼 Taller: <strong>{{ prod.taller }}</strong></p>
+                                <p class="card-text mb-1">💲 <strong>${{ prod.precio_producto }}</strong></p>
+                                <p>
+                                    {% if prod.stock_producto > 0 %}
+                                        <span class="badge bg-success">Stock: {{ prod.stock_producto }}</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Agotado</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="card-footer bg-transparent border-0 text-center">
+                                {% if prod.stock_producto > 0 %}
+                                    {% if session.get("usuario") and session["usuario"]["rol"] in ["cliente", "taller"] %}
+                                        <form action="{{ url_for('routes.carrito_agregar', id_producto=prod.id_producto) }}" method="post" class="d-flex">
+                                            <input type="number" name="cantidad" value="1" min="1" max="{{ prod.stock_producto }}" 
+                                                class="form-control me-2" style="width: 80px;">
+                                            <button type="submit" class="btn btn-success flex-fill">🛒 Añadir</button>
+                                        </form>
+                                    {% else %}
+                                        <small class="text-muted">Solo clientes/talleres</small>
+                                    {% endif %}
+                                {% else %}
+                                    <small class="text-muted">No disponible</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                     {% endif %}
+                    {% endfor %}
                 </div>
             </div>
+            {% endfor %}
         </div>
-        {% else %}
-        <p class="text-center text-muted">No hay productos publicados</p>
-        {% endfor %}
+
+        <!-- Controles -->
+        <button class="carousel-control-prev" type="button" data-bs-target="#carouselProductos" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon"></span>
+        </button>
+        <button class="carousel-control-next" type="button" data-bs-target="#carouselProductos" data-bs-slide="next">
+            <span class="carousel-control-next-icon"></span>
+        </button>
     </div>
+    {% else %}
+        <p class="text-center text-muted">No hay productos publicados</p>
+    {% endif %}
 
     <!-- Botón para ver carrito -->
     <div class="mt-5 text-center">
